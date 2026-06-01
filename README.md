@@ -120,6 +120,92 @@ XGBoost selected as the platform engine due to highest ROC AUC and lowest Log Lo
 Tested in a two-machine controlled environment:
 - Victim machine: 192.168.20.8 (running ShieldSOC)
 - Attacker machine: 192.168.20.7 (hping3, nmap, custom scripts)
+## Troubleshooting
+
+**pyshark not capturing packets**
+```bash
+sudo setcap cap_net_raw,cap_net_admin+eip $(which tshark)
+```
+
+**iptables permission denied**
+```bash
+sudo visudo
+# Add: danoteas ALL=(ALL) NOPASSWD: /sbin/iptables
+```
+
+**Port 443 already in use**
+```bash
+sudo systemctl stop apache2
+sudo systemctl restart nginx
+```
+
+**WebSocket connection failed**
+- Check nginx config has WebSocket proxy headers
+- Make sure you access via https:// not http://
+
+---
+
+## Recommendations for Production
+
+- Replace self-signed SSL certificate with Let's Encrypt:
+```bash
+sudo apt install certbot python3-certbot-nginx
+sudo certbot --nginx -d yourdomain.com
+```
+
+- Change default credentials in .env before deployment
+- Set strong JWT secret (minimum 32 characters)
+- Configure Telegram alerts for 24/7 monitoring
+- Set ML threshold between 0.65-0.75 for balanced detection
+- Add your gateway and trusted IPs to whitelist before starting
+
+---
+
+## Attack Testing (Lab Only)
+
+To simulate attacks in controlled environment:
+```bash
+# SYN Flood
+sudo hping3 -S --flood -V -p 80 192.168.20.8
+
+# UDP Flood  
+sudo hping3 --udp --flood -p 80 192.168.20.8
+
+# Port Scan
+nmap -sS -p 1-65535 192.168.20.8
+
+# Slowloris
+python3 simulate_traffic.py
+```
+
+**Warning:** Only use on your own machines in isolated lab environment.
+
+---
+
+## Project Structure
+
+```
+shieldsoc/
+├── main.py                 # FastAPI app, all API endpoints
+├── auth.py                 # JWT authentication
+├── config.py               # Configuration
+├── shared_state.py         # Shared detection state
+├── detector/
+│   └── detector_engine.py  # Packet capture, ML inference, rules
+├── services/
+│   ├── event_store.py      # Three-tier storage
+│   ├── mitigation.py       # iptables blocking
+│   ├── session_engine.py   # Attack session tracking
+│   └── telegram_alerts.py  # Telegram notifications
+├── ml_pipeline/
+│   ├── generate_dataset_v3.py
+│   ├── build_features_v2.py
+│   └── train_model_v2.py
+├── templates/              # Jinja2 HTML templates
+├── static/                 # JS, CSS assets
+├── model/                  # Trained XGBoost model
+└── shieldsoc.nginx         # nginx configuration
+```
 
 ## License
 
