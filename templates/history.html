@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+{% block content %}
+
+<!-- ═══ DB STAT TILES (Splunk Image 7 style) ═══════════════════════ -->
+<div class="row g-3 mb-3" id="historyStatRow">
+    <div class="col-md-3">
+        <div class="metric-card accent-cyan">
+            <div class="metric-label">Total Events</div>
+            <div class="metric-value text-cyan" id="hstatTotal">—</div>
+            <div class="metric-sub">In database</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="metric-card accent-red">
+            <div class="metric-label">Attack Events</div>
+            <div class="metric-value text-red" id="hstatAttacks">—</div>
+            <div class="metric-sub">Decision = attack</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="metric-card accent-amber">
+            <div class="metric-label">DB Size</div>
+            <div class="metric-value" style="color:var(--amber)" id="hstatSize">—</div>
+            <div class="metric-sub">Warm tier</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="metric-card accent-green">
+            <div class="metric-label">Since</div>
+            <div class="metric-value text-green" id="hstatSince" style="font-size:14px;">—</div>
+            <div class="metric-sub">First recorded event</div>
+        </div>
+    </div>
+</div>
+
+<div class="soc-card">
+
+    <!-- ── Filters ── -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+
+        <span id="dbStats"
+            style="font-size:11px;color:var(--text-secondary);font-family:var(--font-mono);margin-right:4px;"></span>
+
+        <select id="filterDecision" class="form-control" style="width:140px;font-size:13px;" onchange="resetAndLoad()">
+            <option value="" data-i18n="hist.all_dec">All decisions</option>
+            <option value="attack" data-i18n="hist.attack_only">Attack only</option>
+            <option value="normal" data-i18n="hist.normal_only">Normal only</option>
+        </select>
+
+        <select id="filterSeverity" class="form-control" style="width:130px;font-size:13px;" onchange="resetAndLoad()">
+            <option value="" data-i18n="hist.all_sev">All severities</option>
+            <option value="CRITICAL">CRITICAL</option>
+            <option value="HIGH">HIGH</option>
+            <option value="MEDIUM">MEDIUM</option>
+            <option value="LOW">LOW</option>
+        </select>
+
+        <select id="filterType" class="form-control" style="width:130px;font-size:12px;" onchange="resetAndLoad()">
+            <option value="" data-i18n="hist.all_types">All types</option>
+            <option value="SYN_FLOOD">SYN Flood</option>
+            <option value="UDP_FLOOD">UDP Flood</option>
+            <option value="VOLUMETRIC">Volumetric</option>
+            <option value="AMPLIFICATION">Amplification</option>
+            <option value="SLOWLORIS">Slowloris</option>
+            <option value="PORT_SCAN">Port Scan</option>
+            <option value="DISTRIBUTED">Distributed</option>
+        </select>
+
+        <select id="filterRule" class="form-control" style="width:110px;font-size:12px;" onchange="resetAndLoad()">
+            <option value="" data-i18n="hist.all_sources">All sources</option>
+            <option value="rule" data-i18n="hist.rule">Rule-triggered</option>
+            <option value="ml" data-i18n="hist.ml_only">ML only</option>
+        </select>
+
+        <button class="btn-soc" onclick="resetAndLoad()" data-i18n="hist.apply">Apply</button>
+        <button class="btn-soc" onclick="clearFilters()" data-i18n="hist.clear">Clear</button>
+
+        <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+            <a href="/api/events/export" class="btn-soc" data-i18n="hist.export">Export CSV</a>
+            <input id="pageInput" class="form-control" type="number" value="1" min="1"
+                style="width:65px;font-size:13px;">
+            <button class="btn-soc" onclick="changePage(-1)">◀</button>
+            <button class="btn-soc" onclick="changePage(+1)">▶</button>
+            <span id="totalLabel" style="font-size:12px;color:var(--text-secondary);white-space:nowrap;"></span>
+        </div>
+
+    </div>
+
+    <!-- ── Table ── -->
+    <div style="overflow-x:auto;">
+        <table class="soc-table">
+            <thead>
+                <tr>
+                    <th data-i18n="hist.timestamp" onclick="sortTable('timestamp')"
+                        style="cursor:pointer;user-select:none;">Timestamp <span id="sort-timestamp">↓</span></th>
+                    <th onclick="sortTable('packets')" style="cursor:pointer;user-select:none;">Packets <span
+                            id="sort-packets">↕</span></th>
+                    <th onclick="sortTable('pps')" style="cursor:pointer;user-select:none;">PPS <span
+                            id="sort-pps">↕</span></th>
+                    <th>BPS</th>
+                    <th>Entropy</th>
+                    <th>ML Prob</th>
+                    <th data-i18n="hist.atk_type">Attack Type</th>
+                    <th>Severity</th>
+                    <th data-i18n="hist.decision">Decision</th>
+                    <th data-i18n="hist.rule_col">Rule</th>
+                    <th data-i18n="hist.attackers">Attackers</th>
+                    <th data-i18n="hist.mitre">MITRE</th>
+                </tr>
+            </thead>
+            <tbody id="historyTable">
+                <tr>
+                    <td colspan="12" style="color:var(--text-dim);text-align:center;padding:24px;">
+                        Loading…
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+</div>
+
+<script>
+    "use strict"
+
+    // Sort state
+    let _sortCol = "timestamp"
+    let _sortDir = -1  // -1 = desc, 1 = asc
+    let _lastEvents = []
+
+    function sortTable(col) {
+        if (_sortCol === col) {
+            _sortDir *= -1
+        } else {
+            _sortCol = col
+            _sortDir = -1
+        }
+        // Update arrow indicators
+        document.querySelectorAll("[id^='sort-']").forEach(el => el.textContent = "↕")
+        const arrow = document.getElementById("sort-" + col)
+        if (arrow) arrow.textContent = _sortDir === -1 ? "↓" : "↑"
+
+        // Re-render with sorted data
+        renderEvents(_lastEvents)
+    }
+
+    const SEV_ORDER = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 }
+    function sortEvents(events) {
+        return [...events].sort((a, b) => {
+            let va = a[_sortCol], vb = b[_sortCol]
+            if (_sortCol === "severity") { va = SEV_ORDER[va] || 0; vb = SEV_ORDER[vb] || 0 }
+            if (va == null) va = 0
+            if (vb == null) vb = 0
+            if (typeof va === "string") return _sortDir * va.localeCompare(vb)
+            return _sortDir * (vb - va)
+        })
+    }
+
+    async function loadDbStats() {
+        try {
+            const res = await fetch("/api/db/stats")
+            const data = await res.json()
+            if (data.total_events !== undefined) {
+                const oldest = data.oldest_ts
+                    ? new Date(data.oldest_ts * 1000).toLocaleDateString()
+                    : "—"
+                document.getElementById("dbStats").innerText =
+                    `${data.total_events.toLocaleString()} events · ${data.db_size_kb} KB · since ${oldest}`
+                // Fill stat tiles
+                const t = document.getElementById("hstatTotal")
+                const a = document.getElementById("hstatAttacks")
+                const sz = document.getElementById("hstatSize")
+                const si = document.getElementById("hstatSince")
+                if (t) t.innerText = (data.total_events || 0).toLocaleString()
+                if (a) a.innerText = (data.attack_events || 0).toLocaleString()
+                if (sz) sz.innerText = (data.db_size_kb || 0) + " KB"
+                if (si) si.innerText = oldest
+            }
+        } catch (_) { }
+    }
+
+    async function loadHistory() {
+        const page = parseInt(document.getElementById("pageInput").value) || 1
+        const decision = document.getElementById("filterDecision").value
+        const severity = document.getElementById("filterSeverity").value
+
+        const typeVal = document.getElementById("filterType")?.value || ""
+        const ruleVal = document.getElementById("filterRule")?.value || ""
+        let url = `/api/history?page=${page}&size=25`
+        if (decision) url += `&decision=${decision}`
+        if (severity) url += `&severity=${severity}`
+        if (typeVal) url += `&attack_type=${typeVal}`
+
+        try {
+            const res = await fetch(url)
+            const data = await res.json()
+
+            // BUG FIX: was `events.map(...)` — `events` was never declared.
+            // Must use data.events from the API response.
+            let events = data.events || []
+
+            // BUG FIX: apply rule/ml filter client-side
+            if (ruleVal === "rule") {
+                events = events.filter(e => e.rule_triggered)
+            } else if (ruleVal === "ml") {
+                events = events.filter(e => !e.rule_triggered)
+            }
+
+            document.getElementById("totalLabel").innerText =
+                `${(data.total || 0).toLocaleString()} events · page ${page}`
+
+            const tbody = document.getElementById("historyTable")
+
+            if (!events.length) {
+                tbody.innerHTML = `<tr><td colspan="12"
+                style="color:var(--text-dim);text-align:center;padding:24px;">
+                No events match the current filter</td></tr>`
+                return
+            }
+
+            tbody.innerHTML = events.map(e => {
+                const isAtk = e.decision === "attack"
+                const ts = new Date(e.timestamp * 1000)
+                const tsStr = ts.toLocaleDateString() + " " + ts.toLocaleTimeString()
+                const rule = e.rule_triggered
+                    ? `<span style="color:var(--amber);font-size:11px;">Rule</span>`
+                    : `<span style="color:var(--text-dim);font-size:11px;">ML</span>`
+                const atks = (e.attackers || [])
+                    .map(ip => `<code style="font-size:10px;">${ip}</code>`)
+                    .join(" ") || "—"
+
+                return `
+            <tr ${isAtk ? 'style="background:rgba(255,61,87,0.04);"' : ""}>
+                <td style="font-family:var(--font-mono);font-size:11px;
+                            color:var(--text-secondary);white-space:nowrap;">${tsStr}</td>
+                <td style="font-family:var(--font-mono);">${e.packets}</td>
+                <td style="font-family:var(--font-mono);">${(e.pps || 0).toFixed(1)}</td>
+                <td style="font-family:var(--font-mono);">${(e.bps || 0).toFixed(0)}</td>
+                <td style="font-family:var(--font-mono);">${(e.entropy || 0).toFixed(3)}</td>
+                <td style="font-family:var(--font-mono);
+                            color:${(e.attack_probability || 0) > 0.7
+                        ? "var(--red)" : "var(--text-secondary)"};">
+                    ${(e.attack_probability || 0).toFixed(3)}</td>
+                <td style="color:var(--text-secondary);font-size:12px;">${e.attack_type || "—"}</td>
+                <td><span class="badge-sev ${e.severity}">${e.severity}</span></td>
+                <td><span class="badge-decision ${e.decision}">${e.decision.toUpperCase()}</span></td>
+                <td>${rule}</td>
+                <td>${atks}</td>
+                <td>${e.mitre && e.mitre.id
+                        ? `<a href="https://attack.mitre.org/techniques/${e.mitre.id.replace('.', '/')}/"
+                      target="_blank"
+                      style="font-family:var(--font-mono);font-size:10px;
+                             color:var(--purple);text-decoration:none;"
+                      title="${e.mitre.name || ''}">${e.mitre.id}</a>`
+                        : "—"}</td>
+            </tr>`
+            }).join("")
+
+        } catch (e) { console.error(e) }
+    }
+
+    function resetAndLoad() {
+        document.getElementById("pageInput").value = 1
+        loadHistory()
+    }
+
+    function clearFilters() {
+        document.getElementById("filterDecision").value = ""
+        document.getElementById("filterSeverity").value = ""
+        const ft = document.getElementById("filterType")
+        const fr = document.getElementById("filterRule")
+        if (ft) ft.value = ""
+        if (fr) fr.value = ""
+        resetAndLoad()
+    }
+
+    function changePage(d) {
+        const inp = document.getElementById("pageInput")
+        inp.value = Math.max(1, parseInt(inp.value) + d)
+        loadHistory()
+    }
+
+    loadDbStats()
+    loadHistory()
+</script>
+{% endblock %}

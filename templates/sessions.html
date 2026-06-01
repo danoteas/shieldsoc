@@ -1,0 +1,796 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+    .kc-mini {
+        display: flex;
+        gap: 1px;
+        margin-top: 6px;
+    }
+
+    .kc-mini-step {
+        flex: 1;
+        height: 4px;
+        border-radius: 2px;
+        background: var(--border);
+        transition: background .2s;
+    }
+
+    .kc-mini-step.active {
+        background: var(--red);
+    }
+
+    /* Episode detail tabs (Slide 22) */
+    .ep-tab-bar {
+        display: flex;
+        gap: 1px;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 12px;
+    }
+
+    .ep-tab {
+        background: transparent;
+        border: none;
+        border-bottom: 2px solid transparent;
+        color: var(--text-secondary);
+        font-size: 11px;
+        font-weight: 500;
+        font-family: var(--font-main);
+        padding: 6px 12px;
+        cursor: pointer;
+        margin-bottom: -1px;
+        transition: color .12s, border-color .12s;
+    }
+
+    .ep-tab:hover {
+        color: var(--text-primary);
+    }
+
+    .ep-tab.active {
+        color: var(--cyan);
+        border-bottom-color: var(--cyan);
+    }
+
+    .ep-pane {
+        display: none;
+    }
+
+    .ep-pane.active {
+        display: block;
+    }
+
+    /* Response playbook (Slide 4) */
+    .playbook-phase {
+        border-left: 2px solid var(--border);
+        margin-left: 8px;
+        padding-left: 14px;
+        margin-bottom: 8px;
+    }
+
+    .playbook-phase.active {
+        border-left-color: var(--cyan);
+    }
+
+    .playbook-phase.done {
+        border-left-color: var(--green);
+    }
+
+    .phase-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        margin-bottom: 6px;
+        cursor: pointer;
+    }
+
+    .phase-header.done {
+        color: var(--green);
+    }
+
+    .phase-header.active {
+        color: var(--cyan);
+    }
+
+    .phase-task {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 8px;
+        background: var(--bg-surface-2);
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        margin-bottom: 4px;
+        font-size: 11px;
+    }
+
+    .phase-task input[type=checkbox] {
+        accent-color: var(--cyan);
+        cursor: pointer;
+    }
+
+    .phase-task.done-task {
+        opacity: 0.5;
+        text-decoration: line-through;
+    }
+
+    /* Risk badge (Slide 2 style) */
+    .risk-badge-large {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 44px;
+        height: 28px;
+        border-radius: 5px;
+        font-family: var(--font-mono);
+        font-size: 13px;
+        font-weight: 800;
+        padding: 0 8px;
+    }
+
+    /* Owner/Status fields (Slide 2/4) */
+    .incident-field {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .incident-field label {
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+        color: var(--text-dim);
+        font-weight: 600;
+    }
+
+    .incident-field select {
+        background: var(--bg-surface-2);
+        border: 1px solid var(--border);
+        color: var(--text-primary);
+        font-size: 11px;
+        padding: 4px 8px;
+        border-radius: 5px;
+        font-family: var(--font-main);
+        cursor: pointer;
+    }
+
+    .incident-field select:focus {
+        border-color: var(--cyan);
+        outline: none;
+    }
+
+    .session-risk {
+        width: 38px;
+        height: 38px;
+        border-radius: 7px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 800;
+        font-family: var(--font-mono);
+        flex-shrink: 0;
+    }
+
+    .session-expand {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height .3s ease;
+    }
+
+    .session-expand.open {
+        max-height: 600px;
+    }
+</style>
+
+<!-- ═══ SUMMARY CARDS ════════════════════════════════════════════════ -->
+<div class="row g-3 mb-3">
+    <div class="col-md-2">
+        <div class="metric-card accent-red">
+            <div class="metric-label" data-i18n="sess.active">Active</div>
+            <div class="metric-value text-red" id="metActive">0</div>
+            <div class="metric-sub" data-i18n="sess.live_sessions">Live sessions</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="metric-card accent-amber">
+            <div class="metric-label" data-i18n="sess.total">Total</div>
+            <div class="metric-value" style="color:var(--amber)" id="metTotal">0</div>
+            <div class="metric-sub" data-i18n="sess.all_sessions">All sessions</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="metric-card accent-cyan">
+            <div class="metric-label" data-i18n="sess.avg_dur">Avg Duration</div>
+            <div class="metric-value text-cyan" id="metAvgDur">—</div>
+            <div class="metric-sub" data-i18n="sess.per_session">Per session</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="metric-card accent-purple">
+            <div class="metric-label" data-i18n="sess.peak_pps">Peak PPS</div>
+            <div class="metric-value text-purple" id="metPeakPps">0</div>
+            <div class="metric-sub" data-i18n="sess.highest">Highest recorded</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="metric-card accent-red" style="border-top-color:var(--red);">
+            <div class="metric-label" data-i18n="sess.max_risk">Max Risk Score</div>
+            <div class="metric-value text-red" id="metMaxRisk">0</div>
+            <div class="metric-sub" data-i18n="sess.highest_sess">Highest session</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="metric-card accent-green">
+            <div class="metric-label" data-i18n="sess.resolved">Resolved</div>
+            <div class="metric-value text-green" id="metResolved">0</div>
+            <div class="metric-sub" data-i18n="sess.closed">Closed sessions</div>
+        </div>
+    </div>
+</div>
+
+<!-- Episode timeline mini chart -->
+<div class="soc-card mb-3" style="padding:12px 18px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;
+                     color:var(--text-secondary);" data-i18n="sess.risk_timeline">Session Risk Timeline</span>
+        <span style="font-size:10px;color:var(--text-dim);"><span data-i18n="sess.bar_hint">Each bar = one session,
+                height = risk score</span></span>
+    </div>
+    <div style="height:60px;display:flex;align-items:flex-end;gap:2px;overflow:hidden;" id="sessionTimeline">
+        <span style="color:var(--text-dim);font-size:11px;align-self:center;">No session data</span>
+    </div>
+</div>
+
+<!-- ═══ ACTIVE SESSIONS ══════════════════════════════════════════════ -->
+<div class="soc-card mb-4">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <h5 style="margin-bottom:0;">
+            <i class="bi bi-lightning-charge-fill" style="color:var(--red);"></i>
+            Active Sessions
+            <span id="activeBadge" style="background:var(--red-dim);color:var(--red);
+                 font-size:10px;padding:2px 8px;border-radius:10px;
+                 font-family:var(--font-mono);margin-left:8px;">0 active</span>
+        </h5>
+        <button class="btn-soc" onclick="loadSessions()">
+            <i class="bi bi-arrow-clockwise"></i> Refresh
+        </button>
+    </div>
+    <div id="activeCards">
+        <p style="color:var(--text-dim);font-size:12px;text-align:center;padding:20px;">
+            No active attack sessions
+        </p>
+    </div>
+</div>
+
+<!-- ═══ ALL SESSIONS ─ EPISODE VIEW ══════════════════════════════════ -->
+<div class="soc-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <h5 style="margin-bottom:0;">
+            <i class="bi bi-collection"></i>
+            All Sessions — Episode View
+        </h5>
+        <div style="display:flex;gap:8px;align-items:center;">
+            <select id="filterStatus" class="form-control" style="width:120px;font-size:12px;"
+                onchange="loadSessions()">
+                <option value="" data-i18n="sess.all_statuses">All statuses</option>
+                <option value="ONGOING" data-i18n="sess.ongoing">Ongoing</option>
+                <option value="RESOLVED">Resolved</option>
+            </select>
+            <select id="filterSeverity" class="form-control" style="width:120px;font-size:12px;"
+                onchange="loadSessions()">
+                <option value="">All severities</option>
+                <option value="CRITICAL">Critical</option>
+                <option value="HIGH">High</option>
+                <option value="MEDIUM">Medium</option>
+            </select>
+            <select id="sortBy" class="form-control" style="width:120px;font-size:12px;" onchange="loadSessions()">
+                <option value="time" data-i18n="sess.sort_time">Sort: Time</option>
+                <option value="risk" data-i18n="sess.sort_risk">Sort: Risk</option>
+                <option value="duration" data-i18n="sess.sort_dur">Sort: Duration</option>
+                <option value="pps" data-i18n="sess.sort_pps">Sort: Peak PPS</option>
+            </select>
+            <span id="episodeCountBadge" style="font-size:11px;color:var(--text-dim);white-space:nowrap;"></span>
+        </div>
+    </div>
+    <div id="episodeList">
+        <p style="color:var(--text-dim);font-size:12px;text-align:center;padding:20px;">No sessions recorded</p>
+    </div>
+</div>
+
+<script>
+    "use strict"
+
+    const TACTIC_SHORT = [
+        "Recon", "Dev", "Init", "Exec", "Persist", "PrivEsc",
+        "Evade", "Creds", "Discover", "Lateral", "Collect", "C2", "Exfil", "Impact"
+    ]
+    const MITRE_TACTIC = {
+        "T1498": 13, "T1498.001": 13, "T1498.002": 13,
+        "T1499": 13, "T1499.001": 13, "T1046": 8, "T1595": 0, "T1590": 0,
+    }
+
+    function fmtTime(ts) {
+        if (!ts) return "—"
+        const d = new Date(ts * 1000)
+        return d.toLocaleDateString() + " " + d.toLocaleTimeString()
+    }
+    function fmtDur(s) {
+        s = Math.round(s || 0)
+        if (s < 60) return `${s}s`
+        if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`
+        return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`
+    }
+
+    function miniKillChain(mitreId) {
+        const activeIdx = MITRE_TACTIC[mitreId]
+        return TACTIC_SHORT.map((t, i) =>
+            `<div class="kc-mini-step ${i === activeIdx ? "active" : ""}" title="${t}"></div>`
+        ).join("")
+    }
+
+    function riskScore(s) {
+        return Math.round(
+            (s.avg_probability || 0) * 50 +
+            (s.peak_pps || 0) / 200 +
+            (s.severity === "CRITICAL" ? 30 : s.severity === "HIGH" ? 20 : s.severity === "MEDIUM" ? 10 : 5) +
+            (s.total_packets || 0) / 500
+        )
+    }
+
+    function riskColor(r) {
+        return r > 150 ? "var(--red)" : r > 80 ? "var(--amber)" : "var(--green)"
+    }
+
+    function sessionCard(s, isActive = false) {
+        const risk = riskScore(s)
+        const rc = riskColor(risk)
+        const ips = (s.attackers || []).map(ip => `<code>${ip}</code>`).join(" ") || "—"
+        const mitreId = s.mitre_id || ""
+        return `
+    <div style="background:var(--bg-surface-2);border:1px solid var(--border);
+                border-radius:8px;padding:14px 16px;margin-bottom:10px;
+                ${isActive ? "border-left:3px solid var(--red);" : ""}"
+         onclick="toggleExpand('${s.session_id}')">
+        <div style="display:flex;align-items:center;gap:12px;">
+            <!-- Risk badge -->
+            <div class="session-risk" style="background:rgba(255,61,87,0.1);color:${rc};">
+                ${risk}
+            </div>
+            <!-- Main info -->
+            <div style="flex:1;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                    <code style="font-size:11px;color:var(--text-dim);">${s.session_id}</code>
+                    <span class="badge-status ${s.status}">${s.status}</span>
+                    <span class="badge-sev ${s.severity}">${s.severity}</span>
+                    ${isActive ? `<span style="font-size:10px;color:var(--red);animation:pulse 2s infinite;">● LIVE</span>` : ""}
+                </div>
+                <div style="font-size:12px;color:var(--text-primary);margin-bottom:2px;">
+                    <strong>${s.attack_type}</strong> · ${ips}
+                </div>
+                <div style="font-size:11px;color:var(--text-secondary);">
+                    ${fmtTime(s.start_time)}
+                    ${s.end_time ? `→ ${fmtTime(s.end_time)}` : "→ ongoing"}
+                    · Duration: <strong>${fmtDur(s.duration)}</strong>
+                </div>
+                <!-- Mini kill chain -->
+                <div class="kc-mini" title="Kill chain stage">${miniKillChain(mitreId)}</div>
+            </div>
+            <!-- Stats -->
+            <div style="text-align:right;flex-shrink:0;">
+                <div style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:var(--amber);">
+                    ${(s.peak_pps || 0).toFixed(0)}</div>
+                <div style="font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;">peak pps</div>
+                <div style="font-family:var(--font-mono);font-size:12px;color:var(--text-secondary);margin-top:4px;">
+                    ${(s.total_packets || 0).toLocaleString()} pkts</div>
+            </div>
+            <!-- Actions -->
+            <div style="flex-shrink:0;display:flex;flex-direction:column;gap:6px;">
+                <a href="/api/sessions/${s.session_id}/report" class="btn-soc"
+                   onclick="event.stopPropagation()" style="font-size:11px;padding:4px 10px;">
+                   <i class="bi bi-file-pdf"></i> PDF
+                </a>
+                <button class="btn-soc" style="font-size:11px;padding:4px 10px;
+                    border-color:var(--green);color:var(--green);"
+                    onclick="event.stopPropagation();acknowledgeSession('${s.session_id}',this)">
+                    <i class="bi bi-check2-circle"></i> Ack
+                </button>
+            </div>
+        </div>
+    </div>`
+    }
+
+    function expandDetail(s) {
+        const risk = riskScore(s)
+        const rc = riskColor(risk)
+        const mitreId = s.mitre_id || ""
+        const sid = s.session_id || ""
+
+        // Kill chain
+        const kcHtml = TACTIC_SHORT.map((t, i) => {
+            const isActive = MITRE_TACTIC[mitreId] === i
+            return `<div style="flex:1;text-align:center;">
+            <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+                        padding:5px 4px;background:${isActive ? "rgba(255,61,87,0.2)" : "var(--bg-surface-2)"};
+                        border:1px solid ${isActive ? "var(--red)" : "var(--border)"};
+                        color:${isActive ? "var(--red)" : "var(--text-dim)"};">${t}</div>
+            <div style="height:3px;background:${isActive ? "var(--red)" : "transparent"};margin-top:1px;"></div>
+        </div>`
+        }).join("")
+
+        // Response playbook phases (Slide 4)
+        const phases = [
+            { name: "Verify Detections", tasks: ["Confirm attack signature", "Check ML confidence score", "Validate rule trigger"], done: risk > 50 },
+            { name: "Contain Threat", tasks: ["Block attacker IP via iptables", "Update whitelist if needed", "Isolate affected traffic"], done: risk > 100 },
+            { name: "Assess Impact", tasks: ["Measure peak PPS", "Calculate packets absorbed", "Check service availability"], done: false },
+            { name: "Remediate", tasks: ["Adjust detection threshold", "Update block rules", "Document incident"], done: false },
+            { name: "Finalize", tasks: ["Generate PDF report", "Archive session data", "Update playbook"], done: false },
+        ]
+        const totalTasks = phases.reduce((s, p) => s + p.tasks.length, 0)
+        const doneTasks = phases.filter(p => p.done).reduce((s, p) => s + p.tasks.length, 0)
+        const pct = Math.round(doneTasks / totalTasks * 100)
+
+        const playbookHtml = `
+    <div style="margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+        <div style="flex:1;height:4px;background:var(--bg-surface-2);border-radius:2px;overflow:hidden;">
+            <div style="width:${pct}%;height:100%;background:var(--cyan);border-radius:2px;transition:width .5s;"></div>
+        </div>
+        <span style="font-size:11px;color:var(--text-dim);font-family:var(--font-mono);white-space:nowrap;">${pct}% complete</span>
+    </div>
+    ${phases.map((phase, pi) => `
+    <div class="playbook-phase ${phase.done ? "done" : pi === phases.filter(p => p.done).length ? "active" : ""}">
+        <div class="phase-header ${phase.done ? "done" : pi === phases.filter(p => p.done).length ? "active" : ""}">
+            <span style="font-size:14px;">${phase.done ? "✓" : "○"}</span>
+            <span>Phase ${pi + 1}: ${phase.name}</span>
+            <span style="font-size:10px;color:var(--text-dim);margin-left:auto;">${phase.tasks.length} tasks</span>
+        </div>
+        ${phase.tasks.map(task => `
+        <div class="phase-task ${phase.done ? "done-task" : ""}">
+            <input type="checkbox" ${phase.done ? "checked" : ""} onchange="this.closest('.phase-task').classList.toggle('done-task',this.checked)">
+            <span>${task}</span>
+        </div>`).join("")}
+    </div>`).join("")}`
+
+        return `
+    <div style="padding:14px 16px;border-top:1px solid var(--border);">
+
+        <!-- Owner/Status/Disposition row (Slide 2/4) -->
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;padding:10px 12px;
+                    background:var(--bg-surface-2);border-radius:7px;border:1px solid var(--border);">
+            <div class="incident-field">
+                <label>Session ID</label>
+                <span style="font-family:var(--font-mono);font-size:11px;color:var(--cyan);">${sid.slice(0, 12)}…</span>
+            </div>
+            <div class="incident-field">
+                <label>Owner</label>
+                <select onchange="this.style.color='var(--text-primary)'">
+                    <option>Unassigned</option>
+                    <option>analyst@soc.kz</option>
+                    <option>admin@soc.kz</option>
+                </select>
+            </div>
+            <div class="incident-field">
+                <label>Status</label>
+                <select>
+                    <option>New</option>
+                    <option>In Progress</option>
+                    <option>Resolved</option>
+                    <option>Closed</option>
+                </select>
+            </div>
+            <div class="incident-field">
+                <label>Urgency</label>
+                <select>
+                    <option>Critical</option>
+                    <option>High</option>
+                    <option>Medium</option>
+                    <option>Low</option>
+                </select>
+            </div>
+            <div class="incident-field">
+                <label>Disposition</label>
+                <select>
+                    <option>Undetermined</option>
+                    <option>True Positive</option>
+                    <option>False Positive</option>
+                    <option>Duplicate</option>
+                </select>
+            </div>
+            <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+                <span style="font-size:10px;color:var(--text-dim);">Risk Score</span>
+                <div class="risk-badge-large" style="background:rgba(255,61,87,0.15);color:${rc};">${risk}</div>
+                <a href="/api/sessions/${sid}/report" class="btn-soc" style="font-size:11px;">
+                    <i class="bi bi-file-pdf"></i> Report
+                </a>
+            </div>
+        </div>
+
+        <!-- Episode Detail Tabs (Slide 22) -->
+        <div class="ep-tab-bar">
+            <button class="ep-tab active" onclick="switchEpTab(this,'ep-impact-${sid}')">Impact</button>
+            <button class="ep-tab" onclick="switchEpTab(this,'ep-killchain-${sid}')">Kill Chain</button>
+            <button class="ep-tab" onclick="switchEpTab(this,'ep-playbook-${sid}')">Response</button>
+            <button class="ep-tab" onclick="switchEpTab(this,'ep-similar-${sid}');loadSimilar('${sid}','${s.attack_type}',${JSON.stringify(s.attackers || [])})">Similar</button>
+            <button class="ep-tab" onclick="switchEpTab(this,'ep-details-${sid}')">Details</button>
+            <button class="ep-tab" onclick="switchEpTab(this,'ep-notes-${sid}')">Notes</button>
+        </div>
+
+        <!-- TAB: Impact -->
+        <div class="ep-pane active" id="ep-impact-${sid}">
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+                ${[
+                {
+                    label: "Network Load", val: (s.peak_pps || 0) > 1000 ? "SEVERE" : (s.peak_pps || 0) > 500 ? "HIGH" : "MED",
+                    color: (s.peak_pps || 0) > 1000 ? "var(--red)" : (s.peak_pps || 0) > 500 ? "var(--amber)" : "var(--cyan)"
+                },
+                {
+                    label: "Service Impact", val: s.severity === "CRITICAL" ? "SEVERE" : s.severity === "HIGH" ? "MAJOR" : "MINOR",
+                    color: s.severity === "CRITICAL" ? "var(--red)" : s.severity === "HIGH" ? "var(--amber)" : "var(--green)"
+                },
+                {
+                    label: "Availability", val: s.severity === "CRITICAL" ? "AT RISK" : "OK",
+                    color: s.severity === "CRITICAL" ? "var(--red)" : "var(--green)"
+                },
+                { label: "Peak PPS", val: (s.peak_pps || 0).toFixed(0), color: "var(--amber)" },
+                { label: "Pkts Absorbed", val: (s.total_packets || 0).toLocaleString(), color: "var(--text-primary)" },
+                { label: "Duration", val: fmtDur(s.duration), color: "var(--text-primary)" },
+            ].map(kpi => `
+                <div style="flex:1;min-width:100px;background:var(--bg-surface-2);
+                            border:1px solid var(--border);border-radius:7px;padding:10px 12px;text-align:center;">
+                    <div style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;
+                                color:var(--text-dim);margin-bottom:4px;">${kpi.label}</div>
+                    <div style="font-family:var(--font-mono);font-size:16px;font-weight:700;color:${kpi.color};">${kpi.val}</div>
+                </div>`).join("")}
+            </div>
+            <!-- Impacted entities (Slide 22) -->
+            <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">
+                Impacted Entities
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                ${(s.attackers || []).map(ip => `
+                <span style="background:rgba(255,61,87,0.12);border:1px solid rgba(255,61,87,0.3);
+                             border-radius:4px;padding:3px 9px;font-family:var(--font-mono);
+                             font-size:11px;color:var(--red);">
+                    <i class="bi bi-exclamation-triangle-fill" style="font-size:9px;"></i> ${ip}
+                </span>`).join("") || "<span style='color:var(--text-dim);font-size:12px;'>No attackers identified</span>"}
+            </div>
+        </div>
+
+        <!-- TAB: Kill Chain -->
+        <div class="ep-pane" id="ep-killchain-${sid}">
+            <div style="display:flex;gap:1px;margin-bottom:16px;">${kcHtml}</div>
+            <div style="font-size:11px;color:var(--text-secondary);">
+                ${mitreId
+                ? `Active technique: <a href="https://attack.mitre.org/techniques/${mitreId.replace(".", "/")}/\"
+                       target="_blank" style="color:var(--purple);font-family:var(--font-mono);">${mitreId}</a>`
+                : "No MITRE technique mapped for this session type."}
+            </div>
+        </div>
+
+        <!-- TAB: Similar Episodes -->
+        <div class="ep-pane" id="ep-similar-${sid}">
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px;">
+                Sessions matching same attack type or overlapping attacker IPs
+            </div>
+            <div id="similar-content-${sid}">
+                <div style="color:var(--text-dim);font-size:12px;">Click tab to load…</div>
+            </div>
+        </div>
+
+        <!-- TAB: Response Playbook -->
+        <div class="ep-pane" id="ep-playbook-${sid}">
+            ${playbookHtml}
+        </div>
+
+        <!-- TAB: Details -->
+        <div class="ep-pane" id="ep-details-${sid}">
+            <table style="width:100%;font-size:11px;">
+                <tr><td style="color:var(--text-dim);padding:3px 0;width:140px;">Risk Score</td>
+                    <td style="font-family:var(--font-mono);font-weight:700;color:${rc};">${risk}</td></tr>
+                <tr><td style="color:var(--text-dim);padding:3px 0;">Avg ML Probability</td>
+                    <td style="font-family:var(--font-mono);">${(s.avg_probability || 0).toFixed(4)}</td></tr>
+                <tr><td style="color:var(--text-dim);padding:3px 0;">Peak PPS</td>
+                    <td style="font-family:var(--font-mono);">${(s.peak_pps || 0).toFixed(1)}</td></tr>
+                <tr><td style="color:var(--text-dim);padding:3px 0;">Total Packets</td>
+                    <td style="font-family:var(--font-mono);">${(s.total_packets || 0).toLocaleString()}</td></tr>
+                <tr><td style="color:var(--text-dim);padding:3px 0;">Duration</td>
+                    <td style="font-family:var(--font-mono);">${fmtDur(s.duration)}</td></tr>
+                <tr><td style="color:var(--text-dim);padding:3px 0;">Attack Type</td>
+                    <td style="color:var(--text-secondary);">${s.attack_type || "—"}</td></tr>
+                <tr><td style="color:var(--text-dim);padding:3px 0;">MITRE Technique</td>
+                    <td>${mitreId
+                ? `<a href="https://attack.mitre.org/techniques/${mitreId.replace(".", "/")}/\"
+                           target="_blank" style="font-family:var(--font-mono);font-size:10px;
+                           color:var(--purple);text-decoration:none;">${mitreId}</a>` : "—"}</td></tr>
+                <tr><td style="color:var(--text-dim);padding:3px 0;">Attackers</td>
+                    <td>${(s.attackers || []).map(ip => `<code>${ip}</code>`).join(" ") || "—"}</td></tr>
+            </table>
+        </div>
+
+        <!-- TAB: Notes -->
+        <div class="ep-pane" id="ep-notes-${sid}">
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">
+                Session notes — auto-generated
+            </div>
+            <div style="background:var(--bg-surface-2);border:1px solid var(--border);
+                        border-radius:6px;padding:10px 12px;font-size:11px;">
+                <div style="color:var(--text-secondary);margin-bottom:4px;">
+                    <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);">system · ${new Date().toLocaleString()}</span>
+                </div>
+                <div>Session created. Attack type: <strong>${s.attack_type || "Unknown"}</strong>.
+                Severity: <strong>${s.severity || "—"}</strong>. Risk score: <strong>${risk}</strong>.
+                ${(s.attackers || []).length ? `Attacker IPs: ${(s.attackers || []).join(", ")}.` : ""}</div>
+            </div>
+            <div style="margin-top:8px;">
+                <input type="text" placeholder="Add note…"
+                       style="width:100%;background:var(--bg-surface-2);border:1px solid var(--border);
+                              border-radius:5px;padding:7px 10px;font-size:11px;color:var(--text-primary);
+                              font-family:var(--font-main);"
+                       onkeydown="if(event.key==='Enter'&&this.value.trim()){
+                           const d=document.createElement('div');
+                           d.style.cssText='background:var(--bg-surface-2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:11px;margin-top:6px;';
+                           d.innerHTML='<span style=\'font-family:var(--font-mono);font-size:10px;color:var(--cyan);\'>analyst · '+new Date().toLocaleTimeString()+'</span><div style=\'margin-top:3px;\'>'+this.value+'</div>';
+                           this.parentNode.insertBefore(d,this.nextSibling);
+                           this.value='';
+                       }">
+            </div>
+        </div>
+
+    </div>`
+    }
+
+    function switchEpTab(btn, paneId) {
+        const container = btn.closest('.session-expand')
+        container.querySelectorAll('.ep-tab').forEach(t => t.classList.remove('active'))
+        container.querySelectorAll('.ep-pane').forEach(p => p.classList.remove('active'))
+        btn.classList.add('active')
+        const pane = document.getElementById(paneId)
+        if (pane) pane.classList.add('active')
+    }
+    const _expandState = {}
+
+    function toggleExpand(sid) {
+        const el = document.getElementById("expand-" + sid)
+        if (!el) return
+        _expandState[sid] = !_expandState[sid]
+        el.classList.toggle("open", _expandState[sid])
+    }
+
+    async function loadSessions() {
+        try {
+            const [actR, allR] = await Promise.all([
+                fetch("/api/sessions/active"),
+                fetch("/api/sessions"),
+            ])
+            const active = await actR.json()
+            const all = await allR.json()
+
+            // Update summary cards
+            document.getElementById("metActive").innerText = active.length
+            document.getElementById("metTotal").innerText = all.length
+            document.getElementById("activeBadge").innerText = `${active.length} active`
+
+            if (all.length) {
+                const durations = all.map(s => s.duration || 0)
+                const avgDur = durations.reduce((a, b) => a + b, 0) / durations.length
+                document.getElementById("metAvgDur").innerText = fmtDur(avgDur)
+                const peak = Math.max(...all.map(s => s.peak_pps || 0))
+                document.getElementById("metPeakPps").innerText = peak.toFixed(0)
+                const risks = all.map(riskScore)
+                document.getElementById("metMaxRisk").innerText = Math.max(...risks)
+                document.getElementById("metResolved").innerText = all.filter(s => s.status === "RESOLVED").length
+
+                // Session risk timeline
+                const tlEl = document.getElementById("sessionTimeline")
+                const maxR = Math.max(...risks) || 1
+                tlEl.innerHTML = all.slice(-40).map((s, i) => {
+                    const r = riskScore(s)
+                    const h = Math.max(4, Math.round(r / maxR * 56))
+                    const c = r > 150 ? "var(--red)" : r > 80 ? "var(--amber)" : "var(--cyan)"
+                    return `<div title="${s.attack_type} · Risk:${r}"
+                    style="flex:1;height:${h}px;background:${c};border-radius:2px 2px 0 0;
+                           opacity:${s.status === "ONGOING" ? 1 : 0.6};min-width:4px;cursor:pointer;"
+                    onclick="toggleExpand('${s.session_id}')"></div>`
+                }).join("")
+            }
+
+            // Active cards
+            const activeEl = document.getElementById("activeCards")
+            activeEl.innerHTML = active.length
+                ? active.map(s => `
+                ${sessionCard(s, true)}
+                <div id="expand-${s.session_id}" class="session-expand">
+                    ${expandDetail(s)}
+                </div>`).join("")
+                : `<p style="color:var(--text-dim);font-size:12px;text-align:center;padding:20px;">No active attack sessions</p>`
+
+            // Episode list (all sessions)
+            const filterStatus = document.getElementById("filterStatus")?.value || ""
+            const filterSev = document.getElementById("filterSeverity")?.value || ""
+            const sortBy = document.getElementById("sortBy")?.value || "time"
+            let filtered = [...all]
+            if (filterStatus) filtered = filtered.filter(s => s.status === filterStatus)
+            if (filterSev) filtered = filtered.filter(s => s.severity === filterSev)
+            filtered.sort((a, b) => {
+                if (sortBy === "risk") return riskScore(b) - riskScore(a)
+                if (sortBy === "duration") return (b.duration || 0) - (a.duration || 0)
+                if (sortBy === "pps") return (b.peak_pps || 0) - (a.peak_pps || 0)
+                return (b.start_time || 0) - (a.start_time || 0)  // time desc
+            })
+            // Update count badge
+            const badge = document.getElementById("episodeCountBadge")
+            if (badge) badge.textContent = `${filtered.length} session${filtered.length !== 1 ? "s" : ""}`
+
+            const episodeEl = document.getElementById("episodeList")
+            episodeEl.innerHTML = filtered.length
+                ? filtered.map(s => `
+                ${sessionCard(s, false)}
+                <div id="expand-${s.session_id}" class="session-expand">
+                    ${expandDetail(s)}
+                </div>`).join("")
+                : `<p style="color:var(--text-dim);font-size:12px;text-align:center;padding:20px;">No sessions match filter</p>`
+
+        } catch (e) { console.error(e) }
+    }
+
+    loadSessions()
+    setInterval(loadSessions, 5000)
+
+    // Acknowledge session
+    const _acknowledged = new Set()
+    function acknowledgeSession(sid, btn) {
+        _acknowledged.add(sid)
+        if (btn) {
+            btn.innerHTML = '<i class="bi bi-check2-all"></i> Acked'
+            btn.style.borderColor = "var(--text-dim)"
+            btn.style.color = "var(--text-dim)"
+            btn.disabled = true
+        }
+    }
+
+    // Load similar episodes
+    async function loadSimilar(sid, attackType, attackers) {
+        const container = document.getElementById("similar-content-" + sid)
+        if (!container) return
+        container.innerHTML = '<div style="color:var(--text-dim);font-size:12px;">Loading…</div>'
+        try {
+            const res = await fetch("/api/sessions")
+            const all = await res.json()
+            const similar = all.filter(s => {
+                if (s.session_id === sid) return false
+                if (s.attack_type === attackType) return true
+                return (attackers || []).some(ip => (s.attackers || []).includes(ip))
+            }).slice(0, 8)
+
+            if (!similar.length) {
+                container.innerHTML = '<div style="color:var(--text-dim);font-size:12px;">No similar sessions found</div>'
+                return
+            }
+            container.innerHTML = similar.map(s => {
+                const r = riskScore(s)
+                const rc = riskColor(r)
+                const reason = s.attack_type === attackType
+                    ? '<span style="color:var(--amber);font-size:10px;">Same type: ' + s.attack_type + '</span>'
+                    : '<span style="color:var(--cyan);font-size:10px;">Shared IP: ' + ((s.attackers || []).find(ip => (attackers || []).includes(ip)) || "?") + '</span>'
+                return '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;' +
+                    'margin-bottom:6px;background:var(--bg-surface-2);border:1px solid var(--border);' +
+                    'border-radius:6px;cursor:pointer;" onclick="toggleExpand(\'' + s.session_id + '\')">' +
+                    '<div style="width:34px;height:34px;border-radius:6px;background:rgba(255,61,87,0.1);' +
+                    'color:' + rc + ';display:flex;align-items:center;justify-content:center;' +
+                    'font-family:var(--font-mono);font-size:12px;font-weight:700;">' + r + '</div>' +
+                    '<div style="flex:1;min-width:0;">' +
+                    '<div style="font-size:12px;font-weight:500;">' + s.attack_type + '</div>' +
+                    '<div style="font-size:10px;color:var(--text-dim);">' + fmtTime(s.start_time) + ' · ' + fmtDur(s.duration) + ' · ' + reason + '</div>' +
+                    '</div><span class="badge-sev ' + s.severity + '">' + s.severity + '</span></div>'
+            }).join("")
+        } catch (e) {
+            container.innerHTML = '<div style="color:var(--red);font-size:12px;">Failed to load</div>'
+        }
+    }
+
+</script>
+{% endblock %}

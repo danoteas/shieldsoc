@@ -1,0 +1,1916 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShieldSOC — DDoS Detection Platform</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+
+    <style>
+        /* ════════════════════════════════════════════════════════════════
+           DESIGN SYSTEM — ShieldSOC
+           Inspired by: Elastic Security, Grafana, Wazuh, Splunk SIEM
+        ════════════════════════════════════════════════════════════════ */
+        :root {
+            --bg-base: #060d1a;
+            --bg-surface: #0d1b2e;
+            --bg-surface-2: #112240;
+            --bg-sidebar: #080f1e;
+            --border: #1a3050;
+            --border-bright: #1e4080;
+
+            --text-primary: #e8f0fe;
+            --text-secondary: #7a9cc0;
+            --text-dim: #4a6580;
+
+            --cyan: #00d4ff;
+            --cyan-dim: rgba(0, 212, 255, 0.10);
+            --green: #00e676;
+            --amber: #ffab00;
+            --red: #ff3d57;
+            --red-dim: rgba(255, 61, 87, 0.12);
+            --purple: #b388ff;
+
+            --sev-critical: #ff3d57;
+            --sev-high: #ff8f00;
+            --sev-medium: #ffd600;
+            --sev-low: #00d4ff;
+
+            --sidebar-w: 230px;
+            --font-main: 'Inter', system-ui, sans-serif;
+            --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+        }
+
+        /* ── Light mode ─────────────────────────────────────── */
+        body.light-mode {
+            --bg-base: #f0f4f8;
+            --bg-surface: #ffffff;
+            --bg-surface-2: #e8eef5;
+            --bg-sidebar: #1a2744;
+            --border: #c8d6e5;
+            --border-bright: #a0b4cc;
+
+            --text-primary: #1a2744;
+            --text-secondary: #4a6580;
+            --text-dim: #8099b0;
+
+            --cyan-dim: rgba(0, 100, 200, 0.10);
+            --red-dim: rgba(200, 30, 50, 0.10);
+        }
+
+        body.light-mode .topbar {
+            background: #ffffff;
+        }
+
+        body.light-mode code,
+        body.light-mode .ip-chip {
+            background: #e8eef5;
+            color: #0057b7;
+        }
+
+        body.light-mode .soc-table tbody tr:hover td {
+            background: #e8eef5;
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: var(--bg-base);
+            color: var(--text-primary);
+            font-family: var(--font-main);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        /* ── Scrollbar ─────────────────────────────────────────────── */
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-base);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-bright);
+            border-radius: 4px;
+        }
+
+        /* ══════════════════════════════════════════════════════════════
+           SIDEBAR
+        ══════════════════════════════════════════════════════════════ */
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: var(--sidebar-w);
+            height: 100vh;
+            background: var(--bg-sidebar);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            z-index: 200;
+        }
+
+        .sidebar-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 18px 16px;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        .brand-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, #0057b7 0%, #00d4ff 100%);
+            border-radius: 9px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .brand-name {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .brand-sub {
+            font-size: 10px;
+            color: var(--text-secondary);
+            letter-spacing: .05em;
+            text-transform: uppercase;
+        }
+
+        .sidebar-section {
+            padding: 12px 16px 5px;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            flex-shrink: 0;
+        }
+
+        .sidebar a {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            padding: 9px 16px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 400;
+            border-left: 3px solid transparent;
+            transition: background .15s, color .15s, border-color .15s;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .sidebar a:hover {
+            background: var(--bg-surface);
+            color: var(--text-primary);
+            border-color: var(--border-bright);
+        }
+
+        .sidebar a.active {
+            background: var(--cyan-dim);
+            color: var(--cyan);
+            border-color: var(--cyan);
+            font-weight: 600;
+        }
+
+        .sidebar a .nav-icon {
+            font-size: 15px;
+            flex-shrink: 0;
+        }
+
+        .live-dot {
+            width: 7px;
+            height: 7px;
+            background: var(--green);
+            border-radius: 50%;
+            box-shadow: 0 0 6px var(--green);
+            margin-left: auto;
+            flex-shrink: 0;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: .25
+            }
+        }
+
+        .sidebar-footer {
+            margin-top: auto;
+            padding: 12px 16px;
+            font-size: 11px;
+            color: var(--text-dim);
+            border-top: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        /* ══════════════════════════════════════════════════════════════
+           MAIN CONTENT
+        ══════════════════════════════════════════════════════════════ */
+        .main {
+            margin-left: var(--sidebar-w);
+            padding: 26px 28px;
+            min-height: 100vh;
+            color: var(--text-primary);
+        }
+
+        .page-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 22px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .page-header h2 {
+            font-size: 19px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .page-header .sub {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        /* ══════════════════════════════════════════════════════════════
+           CARDS
+        ══════════════════════════════════════════════════════════════ */
+        .soc-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 18px 20px;
+        }
+
+        .soc-card:hover {
+            border-color: var(--border-bright);
+        }
+
+        .soc-card h5,
+        .soc-card h4 {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 14px;
+            letter-spacing: .02em;
+        }
+
+        /* Metric card */
+        .metric-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px 20px;
+        }
+
+        .metric-card .metric-label {
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            color: var(--text-secondary);
+            margin-bottom: 5px;
+        }
+
+        .metric-card .metric-value {
+            font-size: 26px;
+            font-weight: 700;
+            color: var(--text-primary);
+            font-family: var(--font-mono);
+            line-height: 1.1;
+        }
+
+        .metric-card .metric-sub {
+            font-size: 11px;
+            color: var(--text-dim);
+            margin-top: 3px;
+        }
+
+        .metric-card.accent-cyan {
+            border-top: 2px solid var(--cyan);
+        }
+
+        .metric-card.accent-red {
+            border-top: 2px solid var(--red);
+        }
+
+        .metric-card.accent-amber {
+            border-top: 2px solid var(--amber);
+        }
+
+        .metric-card.accent-green {
+            border-top: 2px solid var(--green);
+        }
+
+        .metric-card.accent-purple {
+            border-top: 2px solid var(--purple);
+        }
+
+        /* Chart wrap */
+        .chart-wrap {
+            position: relative;
+            height: 200px;
+        }
+
+        /* ══════════════════════════════════════════════════════════════
+           TABLES  (replace Bootstrap table-dark completely)
+        ══════════════════════════════════════════════════════════════ */
+        .soc-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            color: var(--text-primary);
+        }
+
+        .soc-table thead th {
+            background: var(--bg-surface-2);
+            color: var(--text-secondary);
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .07em;
+            padding: 9px 13px;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+
+        .soc-table tbody td {
+            padding: 9px 13px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-primary);
+            vertical-align: middle;
+        }
+
+        .soc-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .soc-table tbody tr:hover td {
+            background: var(--bg-surface-2);
+        }
+
+        /* ══════════════════════════════════════════════════════════════
+           BADGES
+        ══════════════════════════════════════════════════════════════ */
+        .badge-sev {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: .04em;
+            font-family: var(--font-mono);
+        }
+
+        .badge-sev.CRITICAL {
+            background: rgba(255, 61, 87, .18);
+            color: var(--sev-critical);
+        }
+
+        .badge-sev.HIGH {
+            background: rgba(255, 143, 0, .15);
+            color: var(--sev-high);
+        }
+
+        .badge-sev.MEDIUM {
+            background: rgba(255, 214, 0, .12);
+            color: var(--sev-medium);
+        }
+
+        .badge-sev.LOW {
+            background: rgba(0, 212, 255, .10);
+            color: var(--sev-low);
+        }
+
+        .badge-decision {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            font-family: var(--font-mono);
+        }
+
+        .badge-decision.attack {
+            background: var(--red-dim);
+            color: var(--red);
+        }
+
+        .badge-decision.normal {
+            background: rgba(0, 230, 118, .10);
+            color: var(--green);
+        }
+
+        .badge-status {
+            display: inline-block;
+            padding: 2px 9px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .badge-status.ONGOING {
+            background: var(--red-dim);
+            color: var(--red);
+        }
+
+        .badge-status.RESOLVED {
+            background: rgba(74, 101, 128, .25);
+            color: var(--text-secondary);
+        }
+
+        /* ══════════════════════════════════════════════════════════════
+           BUTTONS
+        ══════════════════════════════════════════════════════════════ */
+        .btn-soc {
+            background: transparent;
+            cursor: pointer;
+            border: 1px solid var(--border-bright);
+            color: var(--text-primary);
+            font-size: 12px;
+            font-weight: 500;
+            padding: 5px 13px;
+            border-radius: 6px;
+            font-family: var(--font-main);
+            transition: background .15s, border-color .15s, color .15s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-soc:hover {
+            background: var(--bg-surface-2);
+            border-color: var(--cyan);
+            color: var(--cyan);
+        }
+
+        .btn-soc.success {
+            border-color: var(--green);
+            color: var(--green);
+        }
+
+        .btn-soc.success:hover {
+            background: rgba(0, 230, 118, .08);
+        }
+
+        .btn-soc.danger:hover {
+            border-color: var(--red);
+            color: var(--red);
+        }
+
+        /* ══════════════════════════════════════════════════════════════
+           MISC
+        ══════════════════════════════════════════════════════════════ */
+        code,
+        .ip-chip {
+            background: var(--bg-surface-2);
+            color: var(--cyan);
+            font-family: var(--font-mono);
+            font-size: 12px;
+            padding: 1px 6px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+        }
+
+        .text-cyan {
+            color: var(--cyan) !important;
+        }
+
+        .text-red {
+            color: var(--red) !important;
+        }
+
+        .text-amber {
+            color: var(--amber) !important;
+        }
+
+        .text-green {
+            color: var(--green) !important;
+        }
+
+        .text-purple {
+            color: var(--purple) !important;
+        }
+
+        .text-muted {
+            color: var(--text-secondary) !important;
+        }
+
+        .text-dim {
+            color: var(--text-dim) !important;
+        }
+
+        hr {
+            border-color: var(--border);
+            opacity: 1;
+        }
+
+        .form-control,
+        .form-range {
+            background: var(--bg-surface-2) !important;
+            border: 1px solid var(--border) !important;
+            color: var(--text-primary) !important;
+        }
+
+        .form-control:focus {
+            border-color: var(--cyan) !important;
+            box-shadow: 0 0 0 2px rgba(0, 212, 255, .15) !important;
+            outline: none;
+        }
+
+        input[type=range] {
+            accent-color: var(--cyan);
+        }
+
+        /* SHAP bar */
+        .shap-bar-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 5px;
+            font-size: 12px;
+        }
+
+        .shap-bar-wrap .shap-label {
+            width: 110px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .shap-bar-fill {
+            height: 12px;
+            border-radius: 3px;
+            min-width: 3px;
+            transition: width .3s;
+        }
+
+        .shap-bar-wrap .shap-val {
+            font-family: var(--font-mono);
+            font-size: 11px;
+        }
+
+        /* Alert banner */
+        #alertBanner {
+            display: none;
+            position: fixed;
+            top: 14px;
+            left: calc(var(--sidebar-w) + 18px);
+            right: 18px;
+            z-index: 999;
+            background: rgba(255, 61, 87, .14);
+            border: 1px solid var(--red);
+            border-radius: 8px;
+            padding: 11px 16px;
+            color: var(--red);
+            font-weight: 600;
+            font-size: 13px;
+            box-shadow: 0 0 24px rgba(255, 61, 87, .2);
+            animation: fadeDown .3s ease;
+        }
+
+        @keyframes fadeDown {
+            from {
+                opacity: 0;
+                transform: translateY(-8px)
+            }
+
+            to {
+                opacity: 1;
+                transform: none
+            }
+        }
+
+        /* ══════════════════════════════════════════════════════════════
+           TOPBAR (persistent top strip)
+        ══════════════════════════════════════════════════════════════ */
+        .topbar {
+            position: fixed;
+            top: 0;
+            left: var(--sidebar-w);
+            right: 0;
+            height: 48px;
+            background: var(--bg-surface);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            z-index: 190;
+            gap: 10px;
+        }
+
+        .topbar-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            flex: 1;
+        }
+
+        .topbar-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 11px;
+            cursor: pointer;
+            font-family: var(--font-main);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: border-color .12s, color .12s, background .12s;
+        }
+
+        .topbar-btn:hover {
+            border-color: var(--cyan);
+            color: var(--cyan);
+            background: var(--cyan-dim);
+        }
+
+        .topbar-btn.ai-active {
+            border-color: var(--purple);
+            color: var(--purple);
+            background: rgba(179, 136, 255, .10);
+        }
+
+        /* Lang selector */
+        .lang-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            border-radius: 5px;
+            padding: 3px 8px;
+            font-size: 11px;
+            cursor: pointer;
+            font-family: var(--font-mono);
+            transition: border-color .12s, color .12s;
+        }
+
+        .lang-btn.active {
+            border-color: var(--cyan);
+            color: var(--cyan);
+        }
+
+        /* Adjust main to account for topbar */
+        .main {
+            padding-top: 68px;
+        }
+
+        /* ══════════════════════════════════════════════════════════════
+           AI SIDEBAR (right fixed panel, Sentinel/Copilot style)
+        ══════════════════════════════════════════════════════════════ */
+        :root {
+            --ai-sidebar-w: 340px;
+        }
+
+        #aiSidebar {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: var(--ai-sidebar-w);
+            height: 100vh;
+            background: var(--bg-surface);
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            z-index: 300;
+            transform: translateX(100%);
+            transition: transform .25s cubic-bezier(.4, 0, .2, 1);
+            box-shadow: -8px 0 32px rgba(0, 0, 0, .4);
+        }
+
+        #aiSidebar.open {
+            transform: translateX(0);
+        }
+
+        /* Push main content when sidebar open */
+        body.ai-open .main {
+            margin-right: var(--ai-sidebar-w);
+            transition: margin-right .25s;
+        }
+
+        body.ai-open .topbar {
+            right: var(--ai-sidebar-w);
+            transition: right .25s;
+        }
+
+        body.ai-open #alertBanner {
+            right: calc(var(--ai-sidebar-w) + 18px);
+        }
+
+        .ai-sidebar-header {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-shrink: 0;
+            background: linear-gradient(135deg, rgba(124, 58, 237, .08), rgba(0, 212, 255, .05));
+        }
+
+        .ai-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #7c3aed, #00d4ff);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .ai-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .ai-msg {
+            font-size: 12px;
+            line-height: 1.6;
+            padding: 9px 12px;
+            border-radius: 8px;
+            max-width: 92%;
+        }
+
+        .ai-msg.assistant {
+            background: var(--bg-surface-2);
+            border: 1px solid var(--border);
+            border-radius: 0 8px 8px 8px;
+            align-self: flex-start;
+        }
+
+        .ai-msg.user {
+            background: rgba(0, 212, 255, .08);
+            border: 1px solid rgba(0, 212, 255, .2);
+            border-radius: 8px 0 8px 8px;
+            align-self: flex-end;
+            color: var(--text-primary);
+        }
+
+        .ai-msg-label {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--purple);
+            margin-bottom: 3px;
+        }
+
+        .ai-quick-btns {
+            padding: 8px 12px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+            flex-shrink: 0;
+        }
+
+        .ai-quick-btn {
+            background: var(--bg-surface-2);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            border-radius: 12px;
+            padding: 3px 10px;
+            font-size: 10px;
+            cursor: pointer;
+            font-family: var(--font-main);
+            transition: border-color .1s, color .1s;
+            white-space: nowrap;
+        }
+
+        .ai-quick-btn:hover {
+            border-color: var(--purple);
+            color: var(--purple);
+        }
+
+        .ai-input-row {
+            padding: 10px 12px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        .ai-input {
+            flex: 1;
+            background: var(--bg-surface-2) !important;
+            border: 1px solid var(--border) !important;
+            color: var(--text-primary) !important;
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-size: 12px;
+            font-family: var(--font-main);
+        }
+
+        .ai-input:focus {
+            border-color: var(--purple) !important;
+            outline: none;
+        }
+
+        .ai-send-btn {
+            background: linear-gradient(135deg, #7c3aed, #00d4ff);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            cursor: pointer;
+            padding: 6px 12px;
+            font-size: 13px;
+            transition: opacity .12s;
+        }
+
+        .ai-send-btn:hover {
+            opacity: .85;
+        }
+
+        .ai-send-btn:disabled {
+            opacity: .4;
+            cursor: not-allowed;
+        }
+
+        /* AI Explain badge on events */
+        .ai-explain-btn {
+            background: rgba(179, 136, 255, .12);
+            border: 1px solid rgba(179, 136, 255, .3);
+            color: var(--purple);
+            border-radius: 4px;
+            padding: 1px 7px;
+            font-size: 10px;
+            cursor: pointer;
+            font-family: var(--font-main);
+            white-space: nowrap;
+            transition: background .1s;
+        }
+
+        .ai-explain-btn:hover {
+            background: rgba(179, 136, 255, .22);
+        }
+
+        /* typing dots */
+        @keyframes dot-blink {
+
+            0%,
+            100% {
+                opacity: 0
+            }
+
+            50% {
+                opacity: 1
+            }
+        }
+
+        .dot1 {
+            animation: dot-blink 1.2s infinite 0.0s;
+        }
+
+        .dot2 {
+            animation: dot-blink 1.2s infinite 0.4s;
+        }
+
+        .dot3 {
+            animation: dot-blink 1.2s infinite 0.8s;
+        }
+
+        /* ── Sidebar collapsible ──────────────────────────────────── */
+        :root {
+            --sidebar-transition: .22s ease;
+        }
+
+        .sidebar {
+            transition: width var(--sidebar-transition);
+            overflow: visible !important;
+        }
+
+        .sidebar.collapsed {
+            width: 54px;
+        }
+
+        .sidebar.collapsed .brand-name,
+        .sidebar.collapsed .brand-sub,
+        .sidebar.collapsed .sidebar-section,
+        .sidebar.collapsed .sidebar-footer {
+            display: none;
+        }
+
+        .sidebar.collapsed a {
+            justify-content: center;
+            padding: 9px 0;
+        }
+
+        .sidebar.collapsed a span:not(.nav-icon):not(.live-dot) {
+            display: none;
+        }
+
+        .sidebar.collapsed .nav-icon,
+        .sidebar.collapsed i.nav-icon {
+            font-size: 17px;
+            width: auto;
+            margin: 0;
+        }
+
+        .main {
+            transition: margin-left var(--sidebar-transition);
+        }
+
+        body.sidebar-collapsed .main {
+            margin-left: 54px;
+        }
+
+        body.sidebar-collapsed .topbar {
+            left: 54px;
+        }
+
+        body.sidebar-collapsed #alertBanner {
+            left: calc(54px + 18px);
+        }
+
+        body.sidebar-collapsed #aiSidebar {
+            left: 0;
+        }
+
+        .sidebar-toggle {
+            position: absolute;
+            top: 14px;
+            right: -13px;
+            width: 26px;
+            height: 26px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-bright);
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            z-index: 201;
+            box-shadow: 0 0 0 3px var(--bg-sidebar);
+            transition: background .15s, color .15s;
+            user-select: none;
+            line-height: 1;
+        }
+
+        .sidebar-toggle:hover {
+            background: var(--bg-surface-2);
+            color: var(--cyan);
+            border-color: var(--cyan);
+        }
+
+        i.nav-icon {
+            font-size: 15px;
+            flex-shrink: 0;
+            width: 20px;
+            text-align: center;
+            line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- ══════════ SIDEBAR ══════════════════════════════════════════════════ -->
+    <div class="sidebar">
+        <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()" title="Toggle sidebar">‹</button>
+        <div class="sidebar-brand">
+            <div class="brand-icon"><i class="bi bi-shield-fill-check" style="color:#fff;font-size:15px;"></i></div>
+            <div>
+                <div class="brand-name">ShieldSOC</div>
+                <div class="brand-sub">DDoS Detection Platform</div>
+            </div>
+        </div>
+
+        <div class="sidebar-section">Monitoring</div>
+
+        <a href="/" class="{% if request.url.path == '/' %}active{% endif %}">
+            <i class="bi bi-speedometer2 nav-icon"></i> Dashboard
+            {% if request.url.path == '/' %}<span class="live-dot"></span>{% endif %}
+        </a>
+
+        <a href="/analytics" class="{% if request.url.path == '/analytics' %}active{% endif %}">
+            <i class="bi bi-graph-up nav-icon"></i> Traffic Analytics
+        </a>
+
+        <a href="/map" class="{% if request.url.path == '/map' %}active{% endif %}">
+            <i class="bi bi-globe nav-icon"></i> Attack Map
+        </a>
+
+        <div class="sidebar-section">Investigation</div>
+
+        <a href="/history" class="{% if request.url.path == '/history' %}active{% endif %}">
+            <i class="bi bi-clock-history nav-icon"></i> Event History
+        </a>
+
+        <a href="/sessions" class="{% if request.url.path == '/sessions' %}active{% endif %}">
+            <i class="bi bi-shield-exclamation nav-icon"></i> Attack Sessions
+        </a>
+
+        <a href="/intelligence" class="{% if request.url.path == '/intelligence' %}active{% endif %}">
+            <i class="bi bi-cpu nav-icon"></i> Intelligence
+        </a>
+
+        <div class="sidebar-footer">
+            ShieldSOC v1.0 · Astana IT University<br>
+            Danial Otegen · 2025
+        </div>
+    </div>
+
+    <!-- ══════════ TOPBAR ═══════════════════════════════════════════════════ -->
+    <div class="topbar">
+        <span class="topbar-title" id="topbarTitle">ShieldSOC</span>
+
+        <!-- Lang switcher -->
+        <button class="lang-btn active" id="lang-en" onclick="setLang('en')">EN</button>
+        <button class="lang-btn" id="lang-ru" onclick="setLang('ru')">RU</button>
+        <button class="lang-btn" id="lang-kz" onclick="setLang('kz')">ҚЗ</button>
+
+        <!-- Theme toggle -->
+        <button class="topbar-btn" id="themeToggleBtn" onclick="toggleTheme()" title="Toggle dark/light mode">
+            <span id="themeIcon">☀️</span>
+        </button>
+
+        <!-- AI Assistant toggle -->
+        <button class="topbar-btn" id="aiToggleBtn" onclick="toggleAiSidebar()" title="AI Security Assistant">
+            <span>✦</span>
+            <span data-i18n="ai.assistant">AI Assistant</span>
+            <span id="aiSidebarStatus" style="width:6px;height:6px;border-radius:50%;
+              background:var(--green);box-shadow:0 0 5px var(--green);display:inline-block;"></span>
+        </button>
+
+        <!-- Settings + Logout -->
+        <a href="/settings" class="topbar-btn">
+            <i class="bi bi-gear"></i>
+            <span data-i18n="nav.settings">Settings</span>
+        </a>
+        <button class="topbar-btn" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>location.href='/login')"
+            style="border-color:rgba(255,61,87,.4);color:var(--red);">
+            <i class="bi bi-box-arrow-right"></i>
+            <span data-i18n="nav.logout">Logout</span>
+        </button>
+    </div>
+
+    <div id="alertBanner"></div>
+
+    <!-- ══════════ AI SIDEBAR ════════════════════════════════════════════════ -->
+    <div id="aiSidebar">
+        <div class="ai-sidebar-header">
+            <div class="ai-avatar">✦</div>
+            <div style="flex:1;">
+                <div style="font-size:13px;font-weight:600;color:var(--text-primary);" data-i18n="ai.assistant">AI
+                    Assistant</div>
+                <div style="font-size:10px;color:var(--text-dim);" data-i18n="ai.subtitle">Powered by Claude · Live
+                    context</div>
+            </div>
+            <div id="aiSidebarIndicator"
+                style="font-size:10px;color:var(--text-dim);display:flex;align-items:center;gap:4px;">
+                <div
+                    style="width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 5px var(--green);">
+                </div>
+                <span data-i18n="ai.ready">Ready</span>
+            </div>
+            <button onclick="toggleAiSidebar()" style="background:transparent;border:none;color:var(--text-dim);cursor:pointer;
+                       font-size:16px;padding:2px 6px;margin-left:4px;">×</button>
+        </div>
+
+        <!-- Context strip -->
+        <div style="padding:8px 14px;border-bottom:1px solid var(--border);
+                display:flex;gap:14px;font-size:10px;color:var(--text-dim);flex-wrap:wrap;">
+            <span><span data-i18n="ai.ctx.attacks">Attacks:</span> <span id="aiCtxA"
+                    style="color:var(--red);font-family:var(--font-mono);">—</span></span>
+            <span><span data-i18n="ai.ctx.blocked">Blocked:</span> <span id="aiCtxB"
+                    style="color:var(--amber);font-family:var(--font-mono);">—</span></span>
+            <span><span data-i18n="ai.ctx.threshold">ML:</span> <span id="aiCtxT"
+                    style="font-family:var(--font-mono);">—</span></span>
+        </div>
+
+        <div class="ai-messages" id="aiMsgs">
+            <div class="ai-msg assistant">
+                <div class="ai-msg-label">✦ AI Assistant</div>
+                <span data-i18n="ai.welcome">Hello! I have live access to your ShieldSOC data. Ask me about attacks, ML
+                    decisions, or mitigation strategies.</span>
+            </div>
+        </div>
+
+        <!-- Quick actions -->
+        <div class="ai-quick-btns">
+            <button class="ai-quick-btn" onclick="aiAsk('ai.q.summarize')" data-i18n="ai.q.summarize">Summarize
+                situation</button>
+            <button class="ai-quick-btn" onclick="aiAsk('ai.q.mitigate')" data-i18n="ai.q.mitigate">Recommend
+                mitigation</button>
+            <button class="ai-quick-btn" onclick="aiAsk('ai.q.shap')" data-i18n="ai.q.shap">Explain ML decision</button>
+            <button class="ai-quick-btn" onclick="aiAsk('ai.q.threats')" data-i18n="ai.q.threats">Top threats</button>
+            <button class="ai-quick-btn" onclick="aiAsk('ai.q.report')" data-i18n="ai.q.report">Generate report</button>
+            <button class="ai-quick-btn" onclick="clearAiChat()"
+                style="margin-left:auto;border-color:rgba(255,61,87,.3);color:var(--red);"
+                data-i18n="ai.clear">Clear</button>
+        </div>
+
+        <div class="ai-input-row">
+            <input class="ai-input" id="aiSidebarInput" type="text" data-i18n-placeholder="ai.placeholder"
+                placeholder="Ask about attacks, SHAP, mitigation…"
+                onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();aiSend()}">
+            <button class="ai-send-btn" id="aiSidebarSend" onclick="aiSend()">➤</button>
+        </div>
+    </div>
+
+    <!-- ══════════ MAIN ══════════════════════════════════════════════════════ -->
+    <div class="main">
+        {% block content %}{% endblock %}
+    </div>
+
+    <script>
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // SIDEBAR TOGGLE (left collapsible)
+        // ═══════════════════════════════════════════════════════════════════════
+        function toggleSidebar() {
+            const sidebar = document.querySelector('.sidebar')
+            const btn = document.getElementById('sidebarToggle')
+            const isNowCollapsed = sidebar.classList.toggle('collapsed')
+            document.body.classList.toggle('sidebar-collapsed', isNowCollapsed)
+            localStorage.setItem('shieldsoc_sidebar', isNowCollapsed ? 'collapsed' : 'open')
+            if (btn) btn.textContent = isNowCollapsed ? '›' : '‹'
+        }
+
+        // Restore saved sidebar state on page load
+        ; (function () {
+            if (localStorage.getItem('shieldsoc_sidebar') === 'collapsed') {
+                document.addEventListener('DOMContentLoaded', () => {
+                    document.querySelector('.sidebar')?.classList.add('collapsed')
+                    document.body.classList.add('sidebar-collapsed')
+                    const btn = document.getElementById('sidebarToggle')
+                    if (btn) btn.textContent = '›'
+                })
+            }
+        })()
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // THEME TOGGLE
+        // ═══════════════════════════════════════════════════════════════════════
+        function toggleTheme() {
+            const isLight = document.body.classList.toggle("light-mode")
+            localStorage.setItem("shieldsoc_theme", isLight ? "light" : "dark")
+            document.getElementById("themeIcon").textContent = isLight ? "🌙" : "☀️"
+        }
+
+        // Apply saved theme on load
+        ; (function () {
+            const saved = localStorage.getItem("shieldsoc_theme")
+            if (saved === "light") {
+                document.body.classList.add("light-mode")
+                document.addEventListener("DOMContentLoaded", () => {
+                    const icon = document.getElementById("themeIcon")
+                    if (icon) icon.textContent = "🌙"
+                })
+            }
+        })()
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // KEYBOARD SHORTCUTS
+        // ═══════════════════════════════════════════════════════════════════════
+        document.addEventListener("keydown", function (e) {
+            // Ctrl+K or Cmd+K — focus global search
+            if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+                e.preventDefault()
+                const search = document.getElementById("globalSearchInput")
+                if (search) { search.focus(); search.select() }
+            }
+            // Escape — close AI sidebar or search dropdown
+            if (e.key === "Escape") {
+                if (_aiOpen) toggleAiSidebar()
+                // Ctrl+B — toggle left sidebar
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key === "b") {
+                e.preventDefault()
+                toggleSidebar()
+                return
+                const drop = document.getElementById("searchDropdown")
+                if (drop) drop.style.display = "none"
+                const input = document.getElementById("globalSearchInput")
+                if (input) input.blur()
+            }
+            // Ctrl+/ — toggle AI sidebar
+            if ((e.ctrlKey || e.metaKey) && e.key === "/") {
+                e.preventDefault()
+                toggleAiSidebar()
+            }
+            // G then D — go to dashboard (Vim-style nav)
+            // G then A — analytics, G then I — intelligence, G then S — sessions
+        })
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // i18n SYSTEM — EN / RU / KZ
+        // ═══════════════════════════════════════════════════════════════════════
+        const TRANSLATIONS = {
+            en: {
+                // Nav
+                "nav.monitoring": "Monitoring",
+                "nav.investigation": "Investigation",
+                "nav.configuration": "Configuration",
+                "nav.dashboard": "Dashboard",
+                "nav.analytics": "Traffic Analytics",
+                "nav.map": "Attack Map",
+                "nav.history": "Event History",
+                "nav.sessions": "Attack Sessions",
+                "nav.intelligence": "Intelligence",
+                "nav.settings": "Settings",
+                "nav.logout": "Logout",
+                // Topbar
+                "topbar.status": "Live",
+                // AI
+                "ai.assistant": "AI Assistant",
+                "ai.subtitle": "Powered by Claude · Live context",
+                "ai.ready": "Ready",
+                "ai.welcome": "Hello! I have live access to your ShieldSOC data. Ask me about attacks, ML decisions, or mitigation strategies.",
+                "ai.placeholder": "Ask about attacks, SHAP, mitigation…",
+                "ai.clear": "Clear",
+                "ai.ctx.attacks": "Attacks:",
+                "ai.ctx.blocked": "Blocked:",
+                "ai.ctx.threshold": "ML:",
+                "ai.q.summarize": "Summarize situation",
+                "ai.q.mitigate": "Recommend mitigation",
+                "ai.q.shap": "Explain ML decision",
+                "ai.q.threats": "Top threats",
+                "ai.q.report": "Generate report",
+                // Dashboard
+                "dash.overview": "Overview",
+                "dash.logs": "Log Analysis",
+                "dash.network": "Network Stats",
+                "dash.total_events": "Total Events",
+                "dash.attacks": "Attack Events",
+                "dash.avg_pps": "Average PPS",
+                "dash.max_sev": "Max Severity",
+                "dash.this_session": "This session",
+                "dash.decision": "Decision = attack",
+                "dash.pps": "Packets per second",
+                "dash.all_events": "Across all events",
+                "dash.atk_prob": "Attack Probability",
+                "dash.pps_chart": "Packets Per Second",
+                "dash.ip_control": "IP Control",
+                "dash.active_blocks": "Active Blocks",
+                "dash.manual_ctrl": "Manual Control",
+                "dash.block": "Block",
+                "dash.unblock": "Unblock",
+                "dash.top_atk": "Top Attackers",
+                "dash.live_feed": "Live Event Feed",
+                "dash.connecting": "Connecting…",
+                "dash.time": "Time",
+                "dash.packets": "Packets",
+                "dash.entropy": "Entropy",
+                "dash.probability": "Probability",
+                "dash.severity": "Severity",
+                "dash.decision_col": "Decision",
+                "dash.type": "Type",
+                "dash.refresh": "Refresh",
+                "dash.search": "Search",
+                "dash.clear": "Clear",
+                "dash.all_events_opt": "All events",
+                "dash.attacks_only": "Attacks only",
+                "dash.normal_only": "Normal only",
+                "dash.all_sev": "All severities",
+                // Sessions
+                "sess.active": "Active",
+                "sess.total": "Total",
+                "sess.avg_dur": "Avg Duration",
+                "sess.peak_pps": "Peak PPS",
+                "sess.max_risk": "Max Risk Score",
+                "sess.resolved": "Resolved",
+                "sess.live_sessions": "Live sessions",
+                "sess.all_sessions": "All sessions",
+                "sess.per_session": "Per session",
+                "sess.highest": "Highest recorded",
+                "sess.highest_sess": "Highest session",
+                "sess.closed": "Closed sessions",
+                "sess.risk_timeline": "Session Risk Timeline",
+                "sess.bar_hint": "Each bar = one session, height = risk score",
+                "sess.active_title": "Active Sessions",
+                "sess.all_title": "All Sessions — Episode View",
+                "sess.all_statuses": "All statuses",
+                "sess.ongoing": "Ongoing",
+                "sess.sort_time": "Sort: Time",
+                "sess.sort_risk": "Sort: Risk",
+                "sess.sort_dur": "Sort: Duration",
+                "sess.sort_pps": "Sort: Peak PPS",
+                "sess.impact": "Impact",
+                "sess.killchain": "Kill Chain",
+                "sess.response": "Response",
+                "sess.details": "Details",
+                "sess.notes": "Notes",
+                // History
+                "hist.all_dec": "All decisions",
+                "hist.attack_only": "Attack only",
+                "hist.normal_only": "Normal only",
+                "hist.all_sev": "All severities",
+                "hist.all_types": "All types",
+                "hist.all_sources": "All sources",
+                "hist.rule": "Rule-triggered",
+                "hist.ml_only": "ML only",
+                "hist.apply": "Apply",
+                "hist.clear": "Clear",
+                "hist.export": "Export CSV",
+                "hist.timestamp": "Timestamp",
+                "hist.packets": "Packets",
+                "hist.entropy": "Entropy",
+                "hist.prob": "ML Prob",
+                "hist.atk_type": "Attack Type",
+                "hist.decision": "Decision",
+                "hist.rule_col": "Rule",
+                "hist.attackers": "Attackers",
+                "hist.mitre": "MITRE",
+                // Analytics
+                "anal.all_time": "All time",
+                "anal.last_1h": "Last 1 hour",
+                "anal.last_6h": "Last 6 hours",
+                "anal.last_24h": "Last 24 hours",
+                "anal.last_7d": "Last 7 days",
+                "anal.all_types": "All attack types",
+                "anal.all_events": "All events",
+                "anal.clear": "Clear",
+                "anal.avg_pps": "Avg PPS",
+                "anal.avg_bps": "Avg BPS",
+                "anal.avg_ent": "Avg Entropy",
+                "anal.atk_windows": "Attack Windows",
+                // Settings
+                "set.tg_alerts": "Telegram Alerts",
+                "set.storage": "Storage — Tiered Retention",
+                "set.agg_stats": "Aggregated Statistics",
+                "set.whitelist": "IP Whitelist",
+                "set.sensitivity": "Detection Sensitivity",
+                "set.rules": "Active Detection Rules",
+                "set.account": "Account",
+                "set.send_test": "Send Test Message",
+                "set.archive": "Archive to cold storage",
+                "set.delete_old": "Delete older than N days",
+                "set.export_cef": "Export CEF (Splunk/QRadar)",
+                "set.add_ip": "+ Add",
+                "set.update_pw": "Update Password",
+                "set.logout": "Logout",
+                // Intelligence
+                "intel.mitre": "MITRE ATT&CK",
+                "intel.killchain": "Kill Chain",
+                "intel.risk": "Risk Analysis",
+                "intel.topology": "Threat Topology",
+                "intel.shap": "SHAP Explanations",
+                "intel.compliance": "Compliance View",
+                "intel.ai": "AI Assistant",
+                "intel.snapshots": "Snapshots",
+            },
+            ru: {
+                "nav.monitoring": "Мониторинг",
+                "nav.investigation": "Расследование",
+                "nav.configuration": "Конфигурация",
+                "nav.dashboard": "Дашборд",
+                "nav.analytics": "Аналитика трафика",
+                "nav.map": "Карта атак",
+                "nav.history": "История событий",
+                "nav.sessions": "Сессии атак",
+                "nav.intelligence": "Разведка",
+                "nav.settings": "Настройки",
+                "nav.logout": "Выйти",
+                "topbar.status": "В эфире",
+                "ai.assistant": "ИИ Ассистент",
+                "ai.subtitle": "На базе Claude · Реальные данные",
+                "ai.ready": "Готов",
+                "ai.welcome": "Привет! У меня есть доступ к вашим данным ShieldSOC. Спросите об атаках, решениях ML или стратегиях смягчения.",
+                "ai.placeholder": "Спросите об атаках, SHAP, митигации…",
+                "ai.clear": "Очистить",
+                "ai.ctx.attacks": "Атак:",
+                "ai.ctx.blocked": "Блок:",
+                "ai.ctx.threshold": "ML:",
+                "ai.q.summarize": "Сводка ситуации",
+                "ai.q.mitigate": "Рекомендации",
+                "ai.q.shap": "Объяснить ML решение",
+                "ai.q.threats": "Топ угрозы",
+                "ai.q.report": "Создать отчёт",
+                "dash.overview": "Обзор",
+                "dash.logs": "Анализ логов",
+                "dash.network": "Сетевые метрики",
+                "dash.total_events": "Всего событий",
+                "dash.attacks": "Атаки",
+                "dash.avg_pps": "Средний PPS",
+                "dash.max_sev": "Макс. серьёзность",
+                "dash.this_session": "За сессию",
+                "dash.decision": "Решение = атака",
+                "dash.pps": "Пакет/сек",
+                "dash.all_events": "Все события",
+                "dash.atk_prob": "Вероятность атаки",
+                "dash.pps_chart": "Пакетов в секунду",
+                "dash.ip_control": "Управление IP",
+                "dash.active_blocks": "Активные блоки",
+                "dash.manual_ctrl": "Ручное управление",
+                "dash.block": "Блок",
+                "dash.unblock": "Разблок",
+                "dash.top_atk": "Топ атакующих",
+                "dash.live_feed": "Живой поток событий",
+                "dash.connecting": "Подключение…",
+                "dash.time": "Время",
+                "dash.packets": "Пакеты",
+                "dash.entropy": "Энтропия",
+                "dash.probability": "Вероятность",
+                "dash.severity": "Серьёзность",
+                "dash.decision_col": "Решение",
+                "dash.type": "Тип",
+                "dash.refresh": "Обновить",
+                "dash.search": "Поиск",
+                "dash.clear": "Сбросить",
+                "dash.all_events_opt": "Все события",
+                "dash.attacks_only": "Только атаки",
+                "dash.normal_only": "Только нормальные",
+                "dash.all_sev": "Все уровни",
+                "sess.active": "Активные",
+                "sess.total": "Всего",
+                "sess.avg_dur": "Ср. длительность",
+                "sess.peak_pps": "Пик PPS",
+                "sess.max_risk": "Макс. риск",
+                "sess.resolved": "Завершённые",
+                "sess.live_sessions": "Активные сессии",
+                "sess.all_sessions": "Все сессии",
+                "sess.per_session": "За сессию",
+                "sess.highest": "Максимальный",
+                "sess.highest_sess": "Наивысший",
+                "sess.closed": "Закрытые",
+                "sess.risk_timeline": "Шкала риска",
+                "sess.bar_hint": "Каждый бар = сессия, высота = риск",
+                "sess.active_title": "Активные сессии",
+                "sess.all_title": "Все сессии",
+                "sess.all_statuses": "Все статусы",
+                "sess.ongoing": "Активные",
+                "sess.sort_time": "Сортировка: Время",
+                "sess.sort_risk": "Сортировка: Риск",
+                "sess.sort_dur": "Сортировка: Длительность",
+                "sess.sort_pps": "Сортировка: PPS",
+                "sess.impact": "Воздействие",
+                "sess.killchain": "Цепочка атаки",
+                "sess.response": "Реагирование",
+                "sess.details": "Детали",
+                "sess.notes": "Заметки",
+                "hist.all_dec": "Все решения",
+                "hist.attack_only": "Только атаки",
+                "hist.normal_only": "Только нормальные",
+                "hist.all_sev": "Все уровни",
+                "hist.all_types": "Все типы",
+                "hist.all_sources": "Все источники",
+                "hist.rule": "По правилам",
+                "hist.ml_only": "Только ML",
+                "hist.apply": "Применить",
+                "hist.clear": "Сбросить",
+                "hist.export": "Экспорт CSV",
+                "hist.timestamp": "Время",
+                "hist.packets": "Пакеты",
+                "hist.entropy": "Энтропия",
+                "hist.prob": "ML вероятность",
+                "hist.atk_type": "Тип атаки",
+                "hist.decision": "Решение",
+                "hist.rule_col": "Правило",
+                "hist.attackers": "Атакующие",
+                "hist.mitre": "MITRE",
+                "anal.all_time": "Всё время",
+                "anal.last_1h": "Последний час",
+                "anal.last_6h": "Последние 6 часов",
+                "anal.last_24h": "Последние 24 часа",
+                "anal.last_7d": "Последние 7 дней",
+                "anal.all_types": "Все типы атак",
+                "anal.all_events": "Все события",
+                "anal.clear": "Сбросить",
+                "anal.avg_pps": "Средний PPS",
+                "anal.avg_bps": "Средний BPS",
+                "anal.avg_ent": "Ср. энтропия",
+                "anal.atk_windows": "Окна атак",
+                "set.tg_alerts": "Telegram оповещения",
+                "set.storage": "Хранилище — Уровни",
+                "set.agg_stats": "Агрегированная статистика",
+                "set.whitelist": "Белый список IP",
+                "set.sensitivity": "Чувствительность детектора",
+                "set.rules": "Активные правила",
+                "set.account": "Аккаунт",
+                "set.send_test": "Отправить тест",
+                "set.archive": "Архивировать",
+                "set.delete_old": "Удалить старее N дней",
+                "set.export_cef": "Экспорт CEF (Splunk/QRadar)",
+                "set.add_ip": "+ Добавить",
+                "set.update_pw": "Обновить пароль",
+                "set.logout": "Выйти",
+                "intel.mitre": "MITRE ATT&CK",
+                "intel.killchain": "Цепочка атаки",
+                "intel.risk": "Анализ рисков",
+                "intel.topology": "Топология угроз",
+                "intel.shap": "SHAP объяснения",
+                "intel.compliance": "Соответствие",
+                "intel.ai": "ИИ Ассистент",
+                "intel.snapshots": "Снимки",
+            },
+            kz: {
+                "nav.monitoring": "Бақылау",
+                "nav.investigation": "Тергеу",
+                "nav.configuration": "Баптау",
+                "nav.dashboard": "Басқару тақтасы",
+                "nav.analytics": "Трафик аналитикасы",
+                "nav.map": "Шабуыл картасы",
+                "nav.history": "Оқиғалар тарихы",
+                "nav.sessions": "Шабуыл сессиялары",
+                "nav.intelligence": "Барлау",
+                "nav.settings": "Параметрлер",
+                "nav.logout": "Шығу",
+                "topbar.status": "Тікелей",
+                "ai.assistant": "ЖИ Көмекші",
+                "ai.subtitle": "Claude негізінде · Тікелей деректер",
+                "ai.ready": "Дайын",
+                "ai.welcome": "Сәлем! ShieldSOC деректеріне тікелей қолжетімдігім бар. Шабуылдар, ML шешімдері немесе қорғану стратегиялары туралы сұраңыз.",
+                "ai.placeholder": "Шабуылдар, SHAP, қорғану туралы сұраңыз…",
+                "ai.clear": "Тазалау",
+                "ai.ctx.attacks": "Шабуыл:",
+                "ai.ctx.blocked": "Бұғат:",
+                "ai.ctx.threshold": "ML:",
+                "ai.q.summarize": "Жағдайды қорыту",
+                "ai.q.mitigate": "Ұсыныстар",
+                "ai.q.shap": "ML шешімін түсіндіру",
+                "ai.q.threats": "Үздік қауіптер",
+                "ai.q.report": "Есеп жасау",
+                "dash.overview": "Шолу",
+                "dash.logs": "Журнал талдауы",
+                "dash.network": "Желі статистикасы",
+                "dash.total_events": "Барлық оқиғалар",
+                "dash.attacks": "Шабуыл оқиғалары",
+                "dash.avg_pps": "Орташа PPS",
+                "dash.max_sev": "Макс. ауырлық",
+                "dash.this_session": "Осы сессия",
+                "dash.decision": "Шешім = шабуыл",
+                "dash.pps": "Пакет/сек",
+                "dash.all_events": "Барлық оқиғалар",
+                "dash.atk_prob": "Шабуыл ықтималдығы",
+                "dash.pps_chart": "Секундтағы пакеттер",
+                "dash.ip_control": "IP басқару",
+                "dash.active_blocks": "Белсенді бұғаттар",
+                "dash.manual_ctrl": "Қолмен басқару",
+                "dash.block": "Бұғаттау",
+                "dash.unblock": "Ашу",
+                "dash.top_atk": "Үздік шабуылдаушылар",
+                "dash.live_feed": "Тікелей оқиға ағыны",
+                "dash.connecting": "Қосылуда…",
+                "dash.time": "Уақыт",
+                "dash.packets": "Пакеттер",
+                "dash.entropy": "Энтропия",
+                "dash.probability": "Ықтималдық",
+                "dash.severity": "Ауырлық",
+                "dash.decision_col": "Шешім",
+                "dash.type": "Түрі",
+                "dash.refresh": "Жаңарту",
+                "dash.search": "Іздеу",
+                "dash.clear": "Тазалау",
+                "dash.all_events_opt": "Барлық оқиғалар",
+                "dash.attacks_only": "Тек шабуылдар",
+                "dash.normal_only": "Тек қалыпты",
+                "dash.all_sev": "Барлық деңгей",
+                "sess.active": "Белсенді",
+                "sess.total": "Барлығы",
+                "sess.avg_dur": "Орт. ұзақтық",
+                "sess.peak_pps": "Пик PPS",
+                "sess.max_risk": "Макс. тәуекел",
+                "sess.resolved": "Шешілген",
+                "sess.live_sessions": "Тікелей сессиялар",
+                "sess.all_sessions": "Барлық сессиялар",
+                "sess.per_session": "Сессия бойынша",
+                "sess.highest": "Ең жоғары",
+                "sess.highest_sess": "Ең жоғары",
+                "sess.closed": "Жабылған",
+                "sess.risk_timeline": "Тәуекел шкаласы",
+                "sess.bar_hint": "Әр баған = сессия, биіктік = тәуекел",
+                "sess.active_title": "Белсенді сессиялар",
+                "sess.all_title": "Барлық сессиялар",
+                "sess.all_statuses": "Барлық мәртебелер",
+                "sess.ongoing": "Жалғасуда",
+                "sess.sort_time": "Сорт: Уақыт",
+                "sess.sort_risk": "Сорт: Тәуекел",
+                "sess.sort_dur": "Сорт: Ұзақтық",
+                "sess.sort_pps": "Сорт: PPS",
+                "sess.impact": "Әсер",
+                "sess.killchain": "Шабуыл тізбегі",
+                "sess.response": "Жауап",
+                "sess.details": "Мәліметтер",
+                "sess.notes": "Жазбалар",
+                "hist.all_dec": "Барлық шешімдер",
+                "hist.attack_only": "Тек шабуылдар",
+                "hist.normal_only": "Тек қалыпты",
+                "hist.all_sev": "Барлық деңгей",
+                "hist.all_types": "Барлық түрлер",
+                "hist.all_sources": "Барлық көздер",
+                "hist.rule": "Ережелер бойынша",
+                "hist.ml_only": "Тек ML",
+                "hist.apply": "Қолдану",
+                "hist.clear": "Тазалау",
+                "hist.export": "CSV экспорт",
+                "hist.timestamp": "Уақыт",
+                "hist.packets": "Пакеттер",
+                "hist.entropy": "Энтропия",
+                "hist.prob": "ML ықтималдық",
+                "hist.atk_type": "Шабуыл түрі",
+                "hist.decision": "Шешім",
+                "hist.rule_col": "Ереже",
+                "hist.attackers": "Шабуылдаушылар",
+                "hist.mitre": "MITRE",
+                "anal.all_time": "Барлық уақыт",
+                "anal.last_1h": "Соңғы 1 сағат",
+                "anal.last_6h": "Соңғы 6 сағат",
+                "anal.last_24h": "Соңғы 24 сағат",
+                "anal.last_7d": "Соңғы 7 күн",
+                "anal.all_types": "Барлық шабуыл түрлері",
+                "anal.all_events": "Барлық оқиғалар",
+                "anal.clear": "Тазалау",
+                "anal.avg_pps": "Орт. PPS",
+                "anal.avg_bps": "Орт. BPS",
+                "anal.avg_ent": "Орт. энтропия",
+                "anal.atk_windows": "Шабуыл терезелері",
+                "set.tg_alerts": "Telegram хабарламалары",
+                "set.storage": "Қойма — Деңгейлер",
+                "set.agg_stats": "Жиынтық статистика",
+                "set.whitelist": "IP ақ тізімі",
+                "set.sensitivity": "Детектор сезімталдығы",
+                "set.rules": "Белсенді ережелер",
+                "set.account": "Аккаунт",
+                "set.send_test": "Тест жіберу",
+                "set.archive": "Мұрағаттау",
+                "set.delete_old": "N күннен ескіні жою",
+                "set.export_cef": "CEF экспорт",
+                "set.add_ip": "+ Қосу",
+                "set.update_pw": "Құпия сөзді жаңарту",
+                "set.logout": "Шығу",
+                "intel.mitre": "MITRE ATT&CK",
+                "intel.killchain": "Шабуыл тізбегі",
+                "intel.risk": "Тәуекел талдауы",
+                "intel.topology": "Қауіп топологиясы",
+                "intel.shap": "SHAP түсіндірмелер",
+                "intel.compliance": "Сәйкестік",
+                "intel.ai": "ЖИ Көмекші",
+                "intel.snapshots": "Суреттемелер",
+            }
+        }
+
+        let _currentLang = localStorage.getItem("shieldsoc_lang") || "en"
+
+        function t(key) {
+            return (TRANSLATIONS[_currentLang] && TRANSLATIONS[_currentLang][key])
+                || TRANSLATIONS["en"][key] || key
+        }
+
+        function setLang(lang) {
+            _currentLang = lang
+            localStorage.setItem("shieldsoc_lang", lang)
+            // Update all data-i18n elements
+            document.querySelectorAll("[data-i18n]").forEach(el => {
+                const key = el.getAttribute("data-i18n")
+                el.textContent = t(key)
+            })
+            // Update placeholders
+            document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
+                el.placeholder = t(el.getAttribute("data-i18n-placeholder"))
+            })
+            // Update lang button states
+            document.querySelectorAll(".lang-btn").forEach(b => b.classList.remove("active"))
+            const btn = document.getElementById("lang-" + lang)
+            if (btn) btn.classList.add("active")
+        }
+
+        // Apply on load
+        document.addEventListener("DOMContentLoaded", () => setLang(_currentLang))
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // AI SIDEBAR
+        // ═══════════════════════════════════════════════════════════════════════
+        let _aiOpen = false
+        let _aiTyping = false
+        let _aiHistory = []
+
+        function toggleAiSidebar() {
+            _aiOpen = !_aiOpen
+            const sidebar = document.getElementById("aiSidebar")
+            const btn = document.getElementById("aiToggleBtn")
+            sidebar.classList.toggle("open", _aiOpen)
+            document.body.classList.toggle("ai-open", _aiOpen)
+            if (btn) btn.classList.toggle("ai-active", _aiOpen)
+            if (_aiOpen) {
+                updateAiCtx()
+                document.getElementById("aiSidebarInput")?.focus()
+            }
+        }
+
+        async function updateAiCtx() {
+            try {
+                const [evR, blkR, thrR] = await Promise.all([
+                    fetch("/api/events"),
+                    fetch("/api/blocked"),
+                    fetch("/api/config/threshold"),
+                ])
+                const events = await evR.json()
+                const blk = await blkR.json()
+                const thr = await thrR.json()
+                const attacks = events.filter(e => e.decision === "attack")
+                const a = document.getElementById("aiCtxA")
+                const b = document.getElementById("aiCtxB")
+                const tt = document.getElementById("aiCtxT")
+                if (a) a.textContent = attacks.length
+                if (b) b.textContent = (blk.blocked || []).length
+                if (tt) tt.textContent = parseFloat(thr.threshold).toFixed(2)
+            } catch (_) { }
+        }
+        setInterval(() => { if (_aiOpen) updateAiCtx() }, 15000)
+
+        function aiAppendMsg(role, text, isError = false) {
+            const container = document.getElementById("aiMsgs")
+            if (!container) return
+            const div = document.createElement("div")
+            div.className = "ai-msg " + role
+            if (role === "assistant") {
+                div.innerHTML = `<div class="ai-msg-label">✦ ${t("ai.assistant")}</div>`
+                    + text.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/\n/g, "<br>")
+            } else {
+                div.textContent = text
+            }
+            if (isError) div.style.color = "var(--red)"
+            container.appendChild(div)
+            container.scrollTop = container.scrollHeight
+        }
+
+        function aiShowTyping() {
+            const container = document.getElementById("aiMsgs")
+            if (!container) return
+            const div = document.createElement("div")
+            div.id = "aiTypingDot"
+            div.className = "ai-msg assistant"
+            div.innerHTML = `<div class="ai-msg-label">✦ ${t("ai.assistant")}</div>`
+                + `<span class="dot1" style="color:var(--purple);">●</span> `
+                + `<span class="dot2" style="color:var(--purple);">●</span> `
+                + `<span class="dot3" style="color:var(--purple);">●</span>`
+            container.appendChild(div)
+            container.scrollTop = container.scrollHeight
+        }
+
+        function aiRemoveTyping() {
+            document.getElementById("aiTypingDot")?.remove()
+        }
+
+        async function aiSend() {
+            if (_aiTyping) return
+            const input = document.getElementById("aiSidebarInput")
+            const msg = input?.value.trim()
+            if (!msg) return
+            input.value = ""
+
+            if (!_aiOpen) toggleAiSidebar()
+            aiAppendMsg("user", msg)
+            _aiHistory.push({ role: "user", content: msg })
+
+            _aiTyping = true
+            const sendBtn = document.getElementById("aiSidebarSend")
+            if (sendBtn) sendBtn.disabled = true
+            const indEl = document.getElementById("aiSidebarIndicator")
+            if (indEl) indEl.innerHTML = `<div style="width:6px;height:6px;border-radius:50%;background:var(--amber);box-shadow:0 0 5px var(--amber);"></div> <span>…</span>`
+            aiShowTyping()
+
+            try {
+                const res = await fetch("/api/ai/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ message: msg })
+                })
+                const data = await res.json()
+                aiRemoveTyping()
+                if (!res.ok) {
+                    aiAppendMsg("assistant", "⚠ " + (data.detail || "Error"), true)
+                } else {
+                    aiAppendMsg("assistant", data.response)
+                    _aiHistory.push({ role: "assistant", content: data.response })
+                    if (_aiHistory.length > 20) _aiHistory.splice(0, 2)
+                }
+            } catch (e) {
+                aiRemoveTyping()
+                aiAppendMsg("assistant", "⚠ Network error", true)
+            }
+
+            _aiTyping = false
+            if (sendBtn) sendBtn.disabled = false
+            if (indEl) indEl.innerHTML = `<div style="width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 5px var(--green);"></div> <span data-i18n="ai.ready">${t("ai.ready")}</span>`
+        }
+
+        // Quick action button — translates key to question text then sends
+        function aiAsk(i18nKey) {
+            const questions = {
+                "ai.q.summarize": "Summarize the current attack situation and key risks",
+                "ai.q.mitigate": "What mitigation actions do you recommend based on current attacks?",
+                "ai.q.shap": "Explain the SHAP feature contributions for the last detected attack",
+                "ai.q.threats": "Which attacker IPs pose the highest risk right now and why?",
+                "ai.q.report": "Generate a brief incident report summary for the current session",
+            }
+            const msg = questions[i18nKey] || i18nKey
+            if (!_aiOpen) toggleAiSidebar()
+            const input = document.getElementById("aiSidebarInput")
+            if (input) { input.value = msg; aiSend() }
+        }
+
+        // Called from event tables — explain specific event
+        window.aiExplain = function (type, ip, prob, shap) {
+            const msg = `Explain this attack event:
+- Attack type: ${type}
+- Attacker IP: ${ip}
+- ML probability: ${prob}
+- Top SHAP feature: ${shap}
+What does this mean and what should I do?`
+            if (!_aiOpen) toggleAiSidebar()
+            const input = document.getElementById("aiSidebarInput")
+            if (input) { input.value = msg; aiSend() }
+        }
+
+        function clearAiChat() {
+            _aiHistory = []
+            const container = document.getElementById("aiMsgs")
+            if (container) {
+                container.innerHTML = `<div class="ai-msg assistant">
+            <div class="ai-msg-label">✦ ${t("ai.assistant")}</div>
+            <span>${t("ai.welcome")}</span>
+        </div>`
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // GLOBAL AUDIO ALERT (works across all tabs)
+        // ═══════════════════════════════════════════════════════════════════════
+        window._audioCtx = null
+        function _ensureAudio() {
+            if (!window._audioCtx) {
+                try { window._audioCtx = new (window.AudioContext || window.webkitAudioContext)() }
+                catch (e) { return null }
+            }
+            if (window._audioCtx.state === "suspended") {
+                window._audioCtx.resume().catch(() => { })
+            }
+            return window._audioCtx
+        }
+        document.addEventListener("click", () => { _ensureAudio() }, { once: true })
+
+        window.playAlert = function (type) {
+            type = type || "normal"
+            try {
+                const ctx = _ensureAudio()
+                if (!ctx) return
+                const osc = ctx.createOscillator()
+                const gain = ctx.createGain()
+                osc.connect(gain); gain.connect(ctx.destination)
+                if (type === "critical") {
+                    osc.type = "square"
+                    osc.frequency.setValueAtTime(880, ctx.currentTime)
+                    osc.frequency.setValueAtTime(660, ctx.currentTime + 0.15)
+                    osc.frequency.setValueAtTime(880, ctx.currentTime + 0.30)
+                    gain.gain.setValueAtTime(0.25, ctx.currentTime)
+                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45)
+                    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.45)
+                } else {
+                    osc.type = "sine"
+                    osc.frequency.setValueAtTime(520, ctx.currentTime)
+                    gain.gain.setValueAtTime(0.12, ctx.currentTime)
+                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25)
+                    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.25)
+                }
+            } catch (e) { console.warn("Audio:", e) }
+        }
+    </script>
+
+</body>
+
+</html>

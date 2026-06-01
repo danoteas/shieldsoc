@@ -1,0 +1,131 @@
+# /etc/nginx/sites-available/shieldsoc
+# ─────────────────────────────────────────────────────────────
+# ShieldSOC — Nginx reverse proxy + load balancer
+# Inspired by: Wazuh, Elastic stack nginx config
+#
+# Setup:
+#   sudo cp shieldsoc.nginx /etc/nginx/sites-available/shieldsoc
+#   sudo ln -s /etc/nginx/sites-available/shieldsoc /etc/nginx/sites-enabled/
+#   sudo nginx -t && sudo systemctl reload nginx
+# ─────────────────────────────────────────────────────────────
+
+# ── Upstream — ShieldSOC app (scale to multiple workers) ─────
+upstream shieldsoc_backend {
+    # Main instance
+    server 127.0.0.1:8001;
+
+    # Add more workers for load balancing (optional):
+    # server 127.0.0.1:8002;
+    # server 127.0.0.1:8003;
+
+    keepalive 32;
+}
+
+# ── Rate limiting ─────────────────────────────────────────────
+limit_req_zone $binary_remote_addr zone=api:10m rate=30r/m;
+limit_req_zone $binary_remote_addr zone=login:10m rate=5r/m;
+
+# ── HTTP → HTTPS redirect ────────────────────────────────────
+server {
+    listen 80;
+    server_name 192.168.20.8;
+    return 301 https://$host$request_uri;
+}
+
+# ── Main HTTPS server ─────────────────────────────────────────
+server {
+    listen 443 ssl http2;
+    server_name 192.168.20.8;
+
+    ssl_certificate     /home/danoteas/ddos-venv/diploma/ddos_platform/cert.pem;
+    ssl_certificate_key /home/danoteas/ddos-venv/diploma/ddos_platform/key.pem;
+
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+    ssl_session_cache   shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    # Security headers (like Elastic Security hardening)
+    add_header X-Frame-Options        DENY;
+    add_header X-Content-Type-Options nosniff;
+    add_header X-XSS-Protection       "1; mode=block";
+    add_header Referrer-Policy        strict-origin-when-cross-origin;
+
+    # ── Static files — served by nginx directly (faster) ─────
+    location /static/ {
+        alias /home/danoteas/ddos-venv/diploma/ddos_platform/static/;
+        expires 1d;
+        add_header Cache-Control "public, immutable";
+        gzip on;
+        gzip_types text/css application/javascript;
+    }
+
+    # ── Login endpoint — strict rate limit ───────────────────
+    location /api/auth/login {
+        limit_req zone=login burst=3 nodelay;
+        limit_req_status 429;
+
+        proxy_pass         http://shieldsoc_backend;
+        proxy_http_version 1.1;
+        proxy_set_header   Upgrade    $http_upgrade;
+        proxy_set_header   Connection "upgrade";
+        proxy_set_header   Host       $host;
+        proxy_set_header   X-Real-IP  $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    # ── API endpoints — general rate limit ───────────────────
+    location /api/ {
+        limit_req zone=api burst=20 nodelay;
+
+        proxy_pass         http://shieldsoc_backend;
+        proxy_http_version 1.1;
+        proxy_set_header   Host      $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 60s;
+    }
+
+    # ── WebSocket (live feed) ─────────────────────────────────
+    location /ws {
+        proxy_pass         http://shieldsoc_backend;
+        proxy_http_version 1.1;
+        proxy_set_header   Upgrade    $http_upgrade;
+        proxy_set_header   Connection "Upgrade";
+        proxy_set_header   Host       $host;
+        proxy_set_header   X-Real-IP  $remote_addr;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    # ── All other routes → app ────────────────────────────────
+    location / {
+        proxy_pass         http://shieldsoc_backend;
+        proxy_http_version 1.1;
+        proxy_set_header   Host      $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 30s;
+    }
+
+    # ── Error pages ───────────────────────────────────────────
+    error_page 429 /429.html;
+    error_page 502 503 /50x.html;
+}
+
+# ── Mock infrastructure — separate virtual hosts for testing ──
+server {
+    listen 8080;
+    server_name 192.168.20.8;
+    root /var/www/mock-site-1;
+    index index.html;
+    location / { try_files $uri $uri/ =404; }
+}
+
+server {
+    listen 8081;
+    server_name 192.168.20.8;
+    root /var/www/mock-site-2;
+    index index.html;
+    location / { try_files $uri $uri/ =404; }
+}

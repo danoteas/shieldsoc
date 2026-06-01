@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="row g-3">
+
+    <div class="col-md-9">
+        <div class="soc-card" style="padding:0;overflow:hidden;">
+            <div id="map" style="height:560px;border-radius:10px;"></div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="soc-card mb-3">
+            <h5>Legend</h5>
+            <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;">
+                <div><span style="color:#ff3d57;font-size:16px;">●</span>
+                    &nbsp;<span style="color:var(--text-primary);">CRITICAL</span></div>
+                <div><span style="color:#ff8f00;font-size:16px;">●</span>
+                    &nbsp;<span style="color:var(--text-primary);">HIGH</span></div>
+                <div><span style="color:#ffd600;font-size:16px;">●</span>
+                    &nbsp;<span style="color:var(--text-primary);">MEDIUM</span></div>
+                <div><span style="color:#00d4ff;font-size:16px;">●</span>
+                    &nbsp;<span style="color:var(--text-primary);">LOW</span></div>
+            </div>
+            <hr style="margin:12px 0;">
+            <div style="font-size:12px;color:var(--text-secondary);">
+                Circle size = packet volume<br>
+                Click marker for details<br>
+                Refreshes every 10s
+            </div>
+            <div style="margin-top:10px;font-size:11px;color:var(--text-dim);font-family:var(--font-mono);"
+                id="pointCount">0 points</div>
+        </div>
+
+        <div class="soc-card">
+            <h5>Top Sources</h5>
+            <ul id="topSources" class="list-unstyled mb-0" style="font-size:12px;"></ul>
+        </div>
+    </div>
+
+</div>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    "use strict"
+
+    const map = L.map("map", { zoomControl: true }).setView([20, 10], 2)
+
+    L.tileLayer(
+        "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+        { attribution: "ShieldSOC · © OpenStreetMap · © CartoDB", maxZoom: 18 }
+    ).addTo(map)
+
+    const SEV = {
+        CRITICAL: "#ff3d57",
+        HIGH: "#ff8f00",
+        MEDIUM: "#ffd600",
+        LOW: "#00d4ff",
+    }
+
+    const markerMap = {}
+
+    async function loadMap() {
+        try {
+            const res = await fetch("/api/map_points")
+            const data = await res.json()
+
+            const seen = new Set()
+
+            data.forEach(p => {
+                seen.add(p.ip)
+                const color = SEV[p.severity] || "#00d4ff"
+                const radius = 5 + Math.min((p.packets || 0) / 80, 18)
+                const location = p.city ? `${p.city}, ${p.country}` : (p.country || "Unknown")
+
+                const popupHtml = `
+                    <div style="font-family:'Inter',sans-serif;font-size:12px;
+                                background:#0d1b2e;color:#e8f0fe;
+                                padding:10px 12px;border-radius:6px;min-width:170px;">
+                        <b style="color:#00d4ff;font-size:13px;">${p.ip}</b><br>
+                        <span style="color:#7a9cc0;font-size:11px;">📍 ${location}</span><br>
+                        <span style="color:#7a9cc0;font-size:11px;">🏢 ${p.isp || '—'}</span>
+                        <hr style="border-color:#1a3050;margin:6px 0;">
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px;">
+                            <span style="color:#7a9cc0;">Packets</span>
+                            <span><b>${p.packets || 0}</b></span>
+                            <span style="color:#7a9cc0;">Events</span>
+                            <span><b>${p.count || 1}</b></span>
+                            <span style="color:#7a9cc0;">Severity</span>
+                            <span><b style="color:${color};">${p.severity}</b></span>
+                        </div>
+                    </div>`
+
+                if (markerMap[p.ip]) {
+                    markerMap[p.ip]
+                        .setRadius(radius)
+                        .setStyle({ color, fillColor: color })
+                        .setPopupContent(popupHtml)
+                } else {
+                    const m = L.circleMarker([p.lat, p.lon], {
+                        radius, color, fillColor: color, fillOpacity: 0.65, weight: 1.5,
+                    }).addTo(map)
+                    m.bindPopup(popupHtml, { className: "soc-popup" })
+                    markerMap[p.ip] = m
+                }
+            })
+
+            Object.keys(markerMap).forEach(ip => {
+                if (!seen.has(ip)) {
+                    map.removeLayer(markerMap[ip])
+                    delete markerMap[ip]
+                }
+            })
+
+            document.getElementById("pointCount").innerText =
+                `${data.length} point${data.length !== 1 ? "s" : ""} plotted`
+
+            const ul = document.getElementById("topSources")
+            const sorted = [...data].sort((a, b) => (b.count || 0) - (a.count || 0)).slice(0, 6)
+            ul.innerHTML = sorted.length
+                ? sorted.map(p => {
+                    const loc = p.city ? `${p.city}, ${p.country}` : (p.country || "Unknown")
+                    return `
+                    <li style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border);">
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <code style="font-size:11px;">${p.ip}</code>
+                            <span style="background:rgba(255,61,87,.15);color:#ff3d57;
+                                         font-family:var(--font-mono);font-size:10px;
+                                         padding:1px 6px;border-radius:3px;">×${p.count || 1}</span>
+                        </div>
+                        <div style="color:var(--text-dim);font-size:10px;margin-top:2px;">📍 ${loc}</div>
+                    </li>`
+                }).join("")
+                : `<li style="color:var(--text-dim);">No attack IPs detected</li>`
+
+        } catch (e) { console.error("Map load error:", e) }
+    }
+
+    loadMap()
+    setInterval(loadMap, 10000)
+</script>
+{% endblock %}

@@ -1,0 +1,492 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+
+<!-- ═══════════ TABS ══════════════════════════════════════════════════════ -->
+<div style="display:flex;gap:2px;margin-bottom:18px;border-bottom:1px solid var(--border);padding-bottom:0;">
+    <button class="dash-tab active" onclick="switchTab('overview')" id="tab-overview" data-i18n="dash.overview">
+        Overview
+    </button>
+    <button class="dash-tab" onclick="switchTab('logs')" id="tab-logs" data-i18n="dash.logs">
+        Log Analysis
+    </button>
+    <button class="dash-tab" onclick="switchTab('network')" id="tab-network" data-i18n="dash.network">
+        Network Stats
+    </button>
+</div>
+
+<style>
+    .dash-tab {
+        background: transparent;
+        border: none;
+        border-bottom: 2px solid transparent;
+        color: var(--text-secondary);
+        font-size: 12px;
+        font-weight: 500;
+        font-family: var(--font-main);
+        padding: 8px 16px;
+        cursor: pointer;
+        margin-bottom: -1px;
+        transition: color .12s, border-color .12s;
+    }
+
+    .dash-tab:hover {
+        color: var(--text-primary);
+    }
+
+    .dash-tab.active {
+        color: var(--cyan);
+        border-bottom-color: var(--cyan);
+    }
+
+    .tab-pane {
+        display: none;
+    }
+
+    .tab-pane.active {
+        display: block;
+    }
+</style>
+
+<div id="pane-overview" class="tab-pane active">
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+     METRIC CARDS
+══════════════════════════════════════════════════════════════════════ -->
+    <div class="row g-3 mb-4">
+
+        <div class="col-md-3">
+            <div class="metric-card accent-cyan">
+                <div class="metric-label" data-i18n="dash.total_events">Total Events</div>
+                <div class="metric-value text-cyan" id="totalEvents">0</div>
+                <div class="metric-sub" data-i18n="dash.this_session">This session</div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="metric-card accent-red">
+                <div class="metric-label">Attack Events</div>
+                <div class="metric-value text-red" id="activeAttacks">0</div>
+                <div class="metric-sub" data-i18n="dash.decision">Decision = attack</div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="metric-card accent-amber">
+                <div class="metric-label" data-i18n="dash.avg_pps">Average PPS</div>
+                <div class="metric-value" id="avgPps" style="color:var(--amber);">0.00</div>
+                <div class="metric-sub" data-i18n="dash.pps">Packets per second</div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="metric-card accent-green">
+                <div class="metric-label" data-i18n="dash.max_sev">Max Severity</div>
+                <div class="metric-value" id="maxSeverity" style="color:var(--sev-low);">LOW</div>
+                <div class="metric-sub" data-i18n="dash.all_events">Across all events</div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+     CHARTS ROW
+══════════════════════════════════════════════════════════════════════ -->
+    <div class="row g-3 mb-4">
+
+        <div class="col-md-6">
+            <div class="soc-card">
+                <h5 data-i18n="dash.atk_prob">Attack Probability</h5>
+                <div class="chart-wrap">
+                    <canvas id="probChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="soc-card">
+                <h5 data-i18n="dash.pps_chart">Packets Per Second (Interface)</h5>
+                <div class="chart-wrap">
+                    <canvas id="packetChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- IP CONTROL ════════════════════════════════════════════════════════ -->
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="soc-card">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                    <h5 style="margin-bottom:0;" data-i18n="dash.ip_control">IP Control</h5>
+                    <span style="font-size:11px;color:var(--text-dim);">Active blocks &middot; Manual iptables
+                        control</span>
+                </div>
+                <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
+                    <div style="flex:1;min-width:180px;">
+                        <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+                                    color:var(--text-secondary);margin-bottom:8px;" data-i18n="dash.active_blocks">
+                            Active Blocks</div>
+                        <ul id="blockedList" class="list-unstyled mb-0"
+                            style="font-size:12px;max-height:100px;overflow-y:auto;"></ul>
+                    </div>
+                    <div style="width:1px;background:var(--border);align-self:stretch;flex-shrink:0;"></div>
+                    <div style="flex:1;min-width:260px;">
+                        <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+                                    color:var(--text-secondary);margin-bottom:8px;" data-i18n="dash.manual_ctrl">Manual
+                            Control</div>
+                        <div style="display:flex;gap:6px;margin-bottom:6px;">
+                            <input id="manualIpInput" type="text" class="form-control" placeholder="e.g. 192.168.20.7"
+                                style="font-family:var(--font-mono);font-size:12px;"
+                                onkeydown="if(event.key==='Enter') manualBlock()">
+                            <button class="btn-soc" style="white-space:nowrap;border-color:var(--red);color:var(--red);"
+                                onclick="manualBlock()" data-i18n="dash.block">Block</button>
+                            <button class="btn-soc" style="white-space:nowrap;" onclick="manualUnblock()"
+                                data-i18n="dash.unblock">Unblock</button>
+                        </div>
+                        <div id="manualBlockStatus"
+                            style="font-size:11px;color:var(--text-dim);min-height:16px;font-family:var(--font-mono);">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+     ATTACKERS + EVENT FEED
+══════════════════════════════════════════════════════════════════════ -->
+    <div class="row g-3">
+
+        <div class="col-md-3">
+            <div class="soc-card" style="height:100%;">
+                <h5 data-i18n="dash.top_atk">Top Attackers</h5>
+                <ul id="attackersList" class="list-unstyled mb-0 mt-2" style="font-size:13px;"></ul>
+            </div>
+        </div>
+
+        <div class="col-md-9">
+            <div class="soc-card">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                    <h5 style="margin-bottom:0;" data-i18n="dash.live_feed">Live Event Feed</h5>
+                    <span id="wsStatus" style="font-size:11px;color:var(--text-dim);font-family:var(--font-mono);">
+                        Connecting…
+                    </span>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="soc-table">
+                        <thead>
+                            <tr>
+                                <th data-i18n="dash.time">Time</th>
+                                <th data-i18n="dash.packets">Packets</th>
+                                <th>PPS</th>
+                                <th data-i18n="dash.entropy">Entropy</th>
+                                <th data-i18n="dash.probability">Probability</th>
+                                <th data-i18n="dash.severity">Severity</th>
+                                <th data-i18n="dash.decision_col">Decision</th>
+                                <th data-i18n="dash.type">Type</th>
+
+                            </tr>
+                        </thead>
+                        <tbody id="eventsTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+
+</div><!-- /pane-overview -->
+
+<!-- ═══════════ LOG ANALYSIS PANE ═══════════════════════════════════════ -->
+<div id="pane-logs" class="tab-pane">
+
+    <div class="row g-3 mb-3">
+        <div class="col-md-3">
+            <div class="metric-card accent-red">
+                <div class="metric-label" data-i18n="dash.total_events">Total Logs</div>
+                <div class="metric-value text-red" id="logTotal">—</div>
+                <div class="metric-sub">In database</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="metric-card accent-amber">
+                <div class="metric-label">Attack Events</div>
+                <div class="metric-value" style="color:var(--amber)" id="logAttacks">—</div>
+                <div class="metric-sub">Decision = attack</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="metric-card accent-cyan">
+                <div class="metric-label">DB Size</div>
+                <div class="metric-value text-cyan" id="logDbSize">—</div>
+                <div class="metric-sub">Warm tier KB</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="metric-card accent-green">
+                <div class="metric-label">Since</div>
+                <div class="metric-value text-green" id="logSince" style="font-size:14px;">—</div>
+                <div class="metric-sub">First event</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Log search + filter -->
+    <div class="soc-card mb-3">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <input id="logSearch" type="text" class="form-control" placeholder="Search by IP address…"
+                style="width:200px;font-size:12px;font-family:var(--font-mono);"
+                onkeydown="if(event.key==='Enter') loadLogs()">
+            <select id="logDecision" class="form-control" style="width:130px;font-size:12px;" onchange="loadLogs()">
+                <option value="">All events</option>
+                <option value="attack">Attacks only</option>
+                <option value="normal">Normal only</option>
+            </select>
+            <select id="logSeverity" class="form-control" style="width:130px;font-size:12px;" onchange="loadLogs()">
+                <option value="">All severities</option>
+                <option value="CRITICAL">CRITICAL</option>
+                <option value="HIGH">HIGH</option>
+                <option value="MEDIUM">MEDIUM</option>
+                <option value="LOW">LOW</option>
+            </select>
+            <button class="btn-soc" onclick="loadLogs()" data-i18n="dash.search">Search</button>
+            <button class="btn-soc" onclick="clearLogFilters()" data-i18n="dash.clear">Clear</button>
+            <div style="margin-left:auto;display:flex;gap:8px;">
+                <button class="btn-soc" onclick="logPage(-1)">◀</button>
+                <span id="logPageInfo" style="font-size:11px;color:var(--text-dim);
+                      font-family:var(--font-mono);align-self:center;">page 1</span>
+                <button class="btn-soc" onclick="logPage(+1)">▶</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="soc-card" style="padding:0;overflow:hidden;">
+        <div style="overflow-x:auto;">
+            <table class="soc-table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Decision</th>
+                        <th>Severity</th>
+                        <th>Type</th>
+                        <th>Attackers</th>
+                        <th>PPS</th>
+                        <th>Packets</th>
+                        <th>ML Prob</th>
+                        <th>Rule</th>
+                    </tr>
+                </thead>
+                <tbody id="logTable">
+                    <tr>
+                        <td colspan="9" style="text-align:center;color:var(--text-dim);padding:24px;">
+                            Select "Log Analysis" tab to load logs
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div><!-- /pane-logs -->
+
+<!-- ═══════════ NETWORK STATS PANE ══════════════════════════════════════ -->
+<div id="pane-network" class="tab-pane">
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="soc-card">
+                <h5>Interface Stats</h5>
+                <table class="soc-table" style="font-size:12px;" id="ifaceTable">
+                    <tbody>
+                        <tr>
+                            <td style="color:var(--text-secondary);">Interface</td>
+                            <td style="font-family:var(--font-mono);">eth0</td>
+                        </tr>
+                        <tr>
+                            <td style="color:var(--text-secondary);">Victim IP</td>
+                            <td style="font-family:var(--font-mono);">192.168.20.8</td>
+                        </tr>
+                        <tr>
+                            <td style="color:var(--text-secondary);">Window size</td>
+                            <td style="font-family:var(--font-mono);">5s</td>
+                        </tr>
+                        <tr>
+                            <td style="color:var(--text-secondary);">Buffer cap</td>
+                            <td style="font-family:var(--font-mono);">50,000 pkts</td>
+                        </tr>
+                        <tr>
+                            <td style="color:var(--text-secondary);">ML threshold</td>
+                            <td style="font-family:var(--font-mono);" id="netThreshold">0.70</td>
+                        </tr>
+                        <tr>
+                            <td style="color:var(--text-secondary);">Active rules</td>
+                            <td style="font-family:var(--font-mono);">7</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="col-md-8">
+            <div class="soc-card">
+                <h5>Active Blocks</h5>
+                <div id="netBlocked" style="font-size:12px;color:var(--text-dim);">
+                    Loading…
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="soc-card">
+        <h5>Whitelist</h5>
+        <div id="netWhitelist" style="font-size:12px;color:var(--text-dim);">
+            Loading…
+        </div>
+    </div>
+</div><!-- /pane-network -->
+
+<!-- ════════════════════════════ JS ══════════════════════════════════════ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="/static/js/dashboard.js"></script>
+<script>
+    // Fix: reinitialize chart sizes when overview tab is shown
+    // Chart.js cannot measure canvas dimensions in hidden containers
+    document.addEventListener("DOMContentLoaded", () => {
+        // Give Chart.js time to initialize, then trigger resize
+        setTimeout(() => {
+            window.dispatchEvent(new Event("resize"))
+        }, 100)
+    })
+</script>
+
+
+<script>
+    "use strict"
+
+    // ── Tab switching ─────────────────────────────────────────────────────────────
+    function switchTab(name) {
+        document.querySelectorAll(".dash-tab").forEach(t => t.classList.remove("active"))
+        document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"))
+        document.getElementById("tab-" + name).classList.add("active")
+        document.getElementById("pane-" + name).classList.add("active")
+
+        if (name === "logs") { loadLogStats(); loadLogs() }
+        if (name === "network") { loadNetworkStats() }
+        if (name === "overview") { setTimeout(() => window.dispatchEvent(new Event("resize")), 50) }
+    }
+
+    // ── Log Analysis ──────────────────────────────────────────────────────────────
+    let _logPage = 1
+
+    async function loadLogStats() {
+        try {
+            const res = await fetch("/api/db/stats")
+            const data = await res.json()
+            document.getElementById("logTotal").innerText = (data.total_events || 0).toLocaleString()
+            document.getElementById("logAttacks").innerText = (data.attack_events || 0).toLocaleString()
+            document.getElementById("logDbSize").innerText = (data.db_size_kb || 0) + " KB"
+            document.getElementById("logSince").innerText = data.oldest_ts
+                ? new Date(data.oldest_ts * 1000).toLocaleDateString()
+                : "—"
+        } catch (_) { }
+    }
+
+    async function loadLogs() {
+        const search = document.getElementById("logSearch").value.trim()
+        const decision = document.getElementById("logDecision").value
+        const severity = document.getElementById("logSeverity").value
+
+        let url = `/api/history?page=${_logPage}&size=20`
+        if (decision) url += `&decision=${decision}`
+        if (severity) url += `&severity=${severity}`
+        if (search) url += `&attacker=${encodeURIComponent(search)}`
+
+        try {
+            const res = await fetch(url)
+            const data = await res.json()
+
+            document.getElementById("logPageInfo").innerText =
+                `page ${_logPage} · ${(data.total || 0).toLocaleString()} total`
+
+            const tbody = document.getElementById("logTable")
+            if (!data.events || !data.events.length) {
+                tbody.innerHTML = `<tr><td colspan="9"
+                style="text-align:center;color:var(--text-dim);padding:20px;">
+                No events found</td></tr>`
+                return
+            }
+
+            tbody.innerHTML = data.events.map(e => {
+                const ts = new Date(e.timestamp * 1000)
+                const tsStr = ts.toLocaleDateString() + " " + ts.toLocaleTimeString()
+                const atks = (e.attackers || []).map(ip =>
+                    `<code style="font-size:10px;">${ip}</code>`).join(" ") || "—"
+                const rule = e.rule_triggered
+                    ? `<span style="color:var(--amber);font-size:10px;">Rule</span>`
+                    : `<span style="color:var(--text-dim);font-size:10px;">ML</span>`
+                const mitreTag = e.mitre && e.mitre.id
+                    ? `<br><a href="https://attack.mitre.org/techniques/${e.mitre.id.replace('.', '/')}/"
+                      target="_blank" style="font-family:var(--font-mono);font-size:9px;
+                      color:var(--purple);text-decoration:none;opacity:0.8;">${e.mitre.id}</a>`
+                    : ""
+                return `
+            <tr ${e.decision === "attack" ? 'style="background:rgba(255,61,87,0.04);"' : ""}>
+                <td style="font-family:var(--font-mono);font-size:10px;color:var(--text-secondary);white-space:nowrap;">${tsStr}</td>
+                <td><span class="badge-decision ${e.decision}">${e.decision.toUpperCase()}</span></td>
+                <td><span class="badge-sev ${e.severity}">${e.severity}</span></td>
+                <td style="font-size:11px;color:var(--text-secondary);">${e.attack_type || "—"}${mitreTag}</td>
+                <td>${atks}</td>
+                <td style="font-family:var(--font-mono);font-size:11px;">${(e.pps || 0).toFixed(1)}</td>
+                <td style="font-family:var(--font-mono);font-size:11px;">${e.packets || 0}</td>
+                <td style="font-family:var(--font-mono);font-size:11px;color:${(e.attack_probability || 0) > 0.7 ? "var(--red)" : "var(--text-secondary)"};">${(e.attack_probability || 0).toFixed(3)}</td>
+                <td>${rule}</td>
+            </tr>`
+            }).join("")
+        } catch (e) { console.error(e) }
+    }
+
+    function clearLogFilters() {
+        document.getElementById("logSearch").value = ""
+        document.getElementById("logDecision").value = ""
+        document.getElementById("logSeverity").value = ""
+        _logPage = 1
+        loadLogs()
+    }
+
+    function logPage(d) {
+        _logPage = Math.max(1, _logPage + d)
+        loadLogs()
+    }
+
+    // ── Network Stats ─────────────────────────────────────────────────────────────
+    async function loadNetworkStats() {
+        try {
+            // Blocked IPs
+            const blockedRes = await fetch("/api/blocked")
+            const blockedData = await blockedRes.json()
+            const blocked = blockedData.blocked || []
+            document.getElementById("netBlocked").innerHTML = blocked.length
+                ? blocked.map(ip => `<code style="margin-right:8px;">${ip}</code>`).join("")
+                : '<span style="color:var(--text-dim);">No blocked IPs</span>'
+
+            // Whitelist
+            const wlRes = await fetch("/api/whitelist")
+            const wlData = await wlRes.json()
+            const wl = wlData.whitelist || []
+            document.getElementById("netWhitelist").innerHTML = wl
+                .map(ip => `<code style="margin-right:8px;margin-bottom:4px;">${ip}</code>`)
+                .join("")
+
+            // Threshold
+            const thrRes = await fetch("/api/config/threshold")
+            const thrData = await thrRes.json()
+            document.getElementById("netThreshold").innerText =
+                parseFloat(thrData.threshold).toFixed(2)
+        } catch (_) { }
+    }
+</script>
+
+
+
+{% endblock %}
